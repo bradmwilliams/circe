@@ -8,11 +8,14 @@ import "strings"
 import "path/filepath"
 import "path"
 import "reflect"
+import "io/ioutil"
 
 import "go/parser"
 import "go/token"
 import "go/ast"
 import "go/types"
+
+import "gopkg.in/yaml.v2"
 
 var outputDone = make(map[string]bool)
 var pkgDir string
@@ -122,51 +125,97 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 	jw.Flush()
 }
 
+type OperatorConfig struct {
+	File string `yaml:"file"`
+	GoType string `yaml:"go_type"`
+	KubeName string `yaml:"kube_name"`
+	Namespace string `yaml:"namespace"`
+}
+
+type GuideYaml struct {
+	ClusterConfig []OperatorConfig `yaml:"cluster_conf"`
+}
+
 func main() {
+
+	yamlFile, err := ioutil.ReadFile("guide.yaml")
+	check(err)
+	guide := GuideYaml{}
+	yaml.Unmarshal(yamlFile, &guide)
+	fmt.Println(fmt.Sprintf("Found %d cluster_info rules", len(guide.ClusterConfig)))
 
 	outputDir := "../operator0-java-gen/src/main/java"
 	basePkg := "operator0.gen"
 	basePackageDir := path.Join(outputDir, strings.Replace(basePkg, ".", "/", -1))
 
-	filename := "types/networkconfig_types.go"
+	astFiles := make([]*ast.File, 0)
+
 	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, filename, nil, parser.ParseComments)
-
-	if err != nil {
-		log.Fatal(err)
-		os.Exit(1)
+	for _, oc := range guide.ClusterConfig {
+		f, err := parser.ParseFile(fset, oc.File, nil, parser.ParseComments)
+		check(err)
+		astFiles = append(astFiles, f)
 	}
-
-	shortPkgName := filepath.Base(filename)
-	shortPkgName = strings.TrimSuffix(shortPkgName, ".go")
-	packageName := fmt.Sprintf("%s.%s", basePkg, shortPkgName)
-
-	pkgDir = path.Join(basePackageDir, shortPkgName)
-	os.MkdirAll(pkgDir, 0750)
 
 	var conf types.Config
 	conf.Error = func(err error) {
 		log.Println("Error during check: ", err)
 	}
 
-	pkg, err := conf.Check(shortPkgName, fset, []*ast.File{f}, nil)
+	pkg, err := conf.Check("parse", fset, astFiles, nil)
 	if err != nil {
 		log.Println("Overall check error: ", err)
 	}
 
-	scope := pkg.Scope()
-	obj := scope.Lookup("NetworkConfig")
-	named := obj.Type().(*types.Named)  // .Type() returns the type of the language element. We assume it is a named type.
-	underlyingStruct := named.Underlying().(*types.Struct) // The underlying type of the object should be a struct
-	structName := obj.Name() // obj.Name()  example: "NetworkConfig"
+	packageNames := make([]string, 0)
 
-	sg := StructGen{
-		pkgDir:pkgDir,
-		pkg:packageName,
+	for _, oc := range guide.ClusterConfig {
+		filename := oc.File
+
+		shortPkgName := filepath.Base(filename)
+		shortPkgName = strings.TrimSuffix(shortPkgName, ".go")
+		packageName := fmt.Sprintf("%s.%s", basePkg, shortPkgName)
+		packageNames = append(packageNames, packageName)
+
+		pkgDir = path.Join(basePackageDir, shortPkgName)
+		os.MkdirAll(pkgDir, 0750)
+
+
+		scope := pkg.Scope()
+		obj := scope.Lookup(oc.GoType)
+		fmt.Println("Loaded", oc.GoType, "=>", obj)
+		named := obj.Type().(*types.Named)  // .Type() returns the type of the language element. We assume it is a named type.
+		underlyingStruct := named.Underlying().(*types.Struct) // The underlying type of the object should be a struct
+		structName := obj.Name() // obj.Name()  example: "NetworkConfig"
+
+		sg := StructGen{
+			pkgDir:pkgDir,
+			pkg:packageName,
+		}
+
+		sg.outputStruct(structName, underlyingStruct)
 	}
-	sg.outputStruct(structName, underlyingStruct)
 
+	javaFile, err := os.OpenFile(path.Join(basePackageDir, "ClusterDefinition.java"), os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
+	check(err)
 
-	//outputStruct(scope, pkgBaseDir, obj)
+	defer javaFile.Close()
+
+	jw := bufio.NewWriter(javaFile)
+	jw.WriteString("package " + basePkg + ";\n\n")
+
+	jw.WriteString("import java.util.*;\n")
+
+	for _, packageName := range packageNames {
+		jw.WriteString("import " + packageName + ".*;\n")
+	}
+
+	jw.WriteString("public interface ClusterDefinition {\n\n")
+	for _, oc := range guide.ClusterConfig {
+		jw.WriteString("\t" + oc.GoType + " get" + oc.GoType + "();\n\n")
+	}
+	jw.WriteString("\n}\n")
+	jw.Flush()
+
 	return
 }

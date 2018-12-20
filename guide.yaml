@@ -1,0 +1,11 @@
+cluster_conf:
+
+- file: types/networkconfig_types.go
+  go_type: NetworkConfig
+  kube_name: default
+
+- file: types/tuned_types.go
+  go_type: Tuned
+  kube_name: default
+  namespace: openshift-cluster-node-tuning-operator
+
