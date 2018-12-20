@@ -19,7 +19,6 @@ type NetworkConfig struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Hello  uint32 `json:"hello"`
 	Spec   NetworkConfigSpec   `json:"spec,omitempty"`
 	Status NetworkConfigStatus `json:"status,omitempty"`
 }

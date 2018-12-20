@@ -14,6 +14,8 @@ import "go/token"
 import "go/ast"
 import "go/types"
 
+var outputDone = make(map[string]bool)
+var pkgDir string
 
 func check(e error) {
 	if e != nil {
@@ -21,58 +23,80 @@ func check(e error) {
 	}
 }
 
-func outputStruct(scope *types.Scope, pkgBaseDir string, obj types.Object) {
+type StructGen struct {
+	pkgDir string
+	pkg    string
+}
 
-	named := obj.Type().(*types.Named)  // .Type() returns the type of the language element. We assume it is a named type.
-	underlyingStruct := named.Underlying().(*types.Struct) // The underlying type of the object should be a struct
+func (sg *StructGen) getJavaType(typ types.Type) string {
+	typeSplit := strings.Split(typ.String(), ".")
+	typeName := typeSplit[len(typeSplit) - 1]   // networkingconfig_types.NetworkConfig -> NetworkConfig ;  uint32 -> uint32
+	typeName = strings.Trim(typeName, "*") // ignore pointer vs non-pointer
 
-	interfaceName := obj.Name() // obj.Name()  example: "NetworkConfig"
-	javaFile, err := os.OpenFile(path.Join(pkgBaseDir, interfaceName + ".java"), os.O_CREATE | os.O_WRONLY, 0750)
+	switch ct := typ.(type) {
+	case *types.Basic:
+		if strings.HasPrefix(typeName, "uint") || strings.HasPrefix(typeName, "int") || strings.HasPrefix(typeName, "rune") || strings.HasPrefix(typeName, "byte"){
+			// We're not trying to match exact int size. That is left of to the user.
+			return "Long"
+		} else if typeName == "string" {
+			return "String"
+		} else if typeName == "bool" {
+			return "Boolean"
+		} else if strings.HasPrefix(typeName, "float") {
+			return "Double"
+		} else {
+			panic("I don't know how to translate type: " + typeName)
+		}
+
+	case *types.Slice:
+		return "List<" + sg.getJavaType(ct.Elem()) + ">"
+	case *types.Array:
+		return "List<" + sg.getJavaType(ct.Elem()) + ">"
+	case *types.Map:
+		return "Map<" + sg.getJavaType(ct.Key()) + "," + sg.getJavaType(ct.Elem()) + ">"
+	case *types.Pointer:
+		return sg.getJavaType(ct.Elem())
+	case *types.Named:
+		// e.g. 'type SomeNamedType struct'    OR    'type SomeNamedType string|uint32...' <==basic
+		switch ut := ct.Underlying().(type) {
+		case *types.Struct:
+			sg.outputStruct(typeName, ut)
+			return typeName
+		default:
+			return sg.getJavaType(ut)
+		}
+	default:
+		panic(fmt.Sprintf("I don't know how to translate type: %s", reflect.TypeOf(typ)))
+	}
+}
+
+func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Struct) {
+
+	_, ok := outputDone[structName]
+	if ok {
+		// if the struct has already been output
+		return
+	} else {
+		outputDone[structName] = true
+	}
+
+	javaFile, err := os.OpenFile(path.Join(sg.pkgDir, structName + ".java"), os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
 	check(err)
 
 	defer javaFile.Close()
 
 	jw := bufio.NewWriter(javaFile)
-	jw.WriteString(fmt.Sprintf("public interface %s {\n", interfaceName))
+
+	jw.WriteString(fmt.Sprintf("package %s;\n\n", sg.pkg))
+
+	jw.WriteString("import java.util.*;\n\n")
+
+	jw.WriteString(fmt.Sprintf("public interface %s {\n", structName))
 
 	for fi := 0; fi < underlyingStruct.NumFields(); fi++ {
 		fieldVar := underlyingStruct.Field(fi)
-		typeSplit := strings.Split(fieldVar.Type().String(), ".")
-		typeName := typeSplit[len(typeSplit)-1]   // networkingconfig_types.NetworkConfig -> NetworkConfig ;  uint32 -> uint32
-
-		fmt.Println(reflect.TypeOf(fieldVar.Type()))
-
-		javaType := "None"
-		if typeName == "uint32" || typeName == "*uint32" {
-			javaType = "Long"
-		} else if typeName == "string" || typeName == "*string" {
-			javaType = "String"
-		} else if typeName == "bool" || typeName == "*bool" {
-			javaType = "Boolean"
-		} else if typeName == "map[string][]string" {
-			javaType = "Map<String,String[]>"
-		} else if typeName == "map[string]string" {
-			javaType = "Map<String,String>"
-		} else {
-			fmt.Println("About to lookup: " + typeName)
-			nextObj := scope.Lookup(typeName)
-			nextObjNamed := nextObj.Type().(*types.Named)
-
-			switch t := nextObjNamed.Underlying().(type) {
-			case *types.Struct:
-			case *types.Basic:
-				fmt.Printf("Basic! %s\n", t)
-				continue
-			default:
-				fmt.Printf("Don't know how to output %s\n", t)
-				continue
-			}
-
-			javaType = typeName
-			fmt.Println("Next follows: " + typeName)
-			fmt.Println(nextObj)
-			outputStruct(scope, pkgBaseDir, nextObj)
-		}
+		fmt.Println(fmt.Sprintf("Processing field: %s", fieldVar))
+		javaType := sg.getJavaType(fieldVar.Type())
 
 		var tag reflect.StructTag = reflect.StructTag(underlyingStruct.Tag(fi))
 		jsonTag := tag.Get("json")
@@ -84,7 +108,7 @@ func outputStruct(scope *types.Scope, pkgBaseDir string, obj types.Object) {
 			fmt.Println("Found jsonName: ", jsonName)
 
 			jw.WriteString(fmt.Sprintf("\t//json:%s\n", jsonName))
-			jw.WriteString(fmt.Sprintf("\tpublic %s get%s();\n", javaType, fieldVar.Name()))  // close 'public interface ... {'
+			jw.WriteString(fmt.Sprintf("\t%s get%s();\n", javaType, fieldVar.Name()))  // close 'public interface ... {'
 		} else {
 			panic(fmt.Sprintf("Unable to find json name for: %s", fieldVar.String()))
 		}
@@ -100,8 +124,9 @@ func outputStruct(scope *types.Scope, pkgBaseDir string, obj types.Object) {
 
 func main() {
 
-	genBaseDir := "gen/src/operator0/gen/"
-	os.MkdirAll(genBaseDir, 0750)
+	outputDir := "../operator0-java-gen/src/main/java"
+	basePkg := "operator0.gen"
+	basePackageDir := path.Join(outputDir, strings.Replace(basePkg, ".", "/", -1))
 
 	filename := "types/networkconfig_types.go"
 	fset := token.NewFileSet()
@@ -112,24 +137,36 @@ func main() {
 		os.Exit(1)
 	}
 
-	pkgName := filepath.Base(filename)
-	pkgName = strings.TrimSuffix(pkgName, ".go")
-	pkgBaseDir := path.Join(genBaseDir, pkgName)
-	os.MkdirAll(pkgBaseDir, 0750)
+	shortPkgName := filepath.Base(filename)
+	shortPkgName = strings.TrimSuffix(shortPkgName, ".go")
+	packageName := fmt.Sprintf("%s.%s", basePkg, shortPkgName)
+
+	pkgDir = path.Join(basePackageDir, shortPkgName)
+	os.MkdirAll(pkgDir, 0750)
 
 	var conf types.Config
 	conf.Error = func(err error) {
 		log.Println("Error during check: ", err)
 	}
 
-	pkg, err := conf.Check(pkgName, fset, []*ast.File{f}, nil)
+	pkg, err := conf.Check(shortPkgName, fset, []*ast.File{f}, nil)
 	if err != nil {
 		log.Println("Overall check error: ", err)
 	}
 
 	scope := pkg.Scope()
 	obj := scope.Lookup("NetworkConfig")
+	named := obj.Type().(*types.Named)  // .Type() returns the type of the language element. We assume it is a named type.
+	underlyingStruct := named.Underlying().(*types.Struct) // The underlying type of the object should be a struct
+	structName := obj.Name() // obj.Name()  example: "NetworkConfig"
 
-	outputStruct(scope, pkgBaseDir, obj)
+	sg := StructGen{
+		pkgDir:pkgDir,
+		pkg:packageName,
+	}
+	sg.outputStruct(structName, underlyingStruct)
+
+
+	//outputStruct(scope, pkgBaseDir, obj)
 	return
 }
