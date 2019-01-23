@@ -14,6 +14,7 @@ import "go/parser"
 import "go/token"
 import "go/ast"
 import "go/types"
+import "unicode"
 
 import "gopkg.in/yaml.v2"
 
@@ -24,6 +25,41 @@ func check(e error) {
 	if e != nil {
 		panic(e)
 	}
+}
+
+type myimporter struct {}
+
+func (importer myimporter) Import(path string) (*types.Package, error) {
+	fmt.Println("Received request for import of: " + path)
+	return nil, nil
+}
+
+func toLowerCamelcase(name string) string {
+	runes := []rune(name)
+	newRunes := make([]rune, len(runes))
+	toggle := true
+
+	// TLS ->  tls
+	// SomeValue -> someValue
+	// someValue -> someValue
+
+	for i, r := range runes {
+		if unicode.IsLower(r) {
+			toggle = false
+		}
+		if toggle && unicode.IsUpper(r) {
+			// If "TLSVerify", we want tlsVerify, so look ahead unless we are at the end
+			if i == 0 || len(runes) == i+1 || unicode.IsLower(runes[i+1]) == false {
+				newRunes[i] = unicode.ToLower(r)
+			} else {
+				newRunes[i] = r
+			}
+		} else {
+			newRunes[i] = r
+		}
+	}
+
+	return string(newRunes)
 }
 
 type StructGen struct {
@@ -104,6 +140,11 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 		var tag reflect.StructTag = reflect.StructTag(underlyingStruct.Tag(fi))
 		jsonTag := tag.Get("json")
 		jsonName := strings.Split(jsonTag, ",")[0]
+
+		if len(jsonName) == 0 {
+			jsonName = toLowerCamelcase(fieldVar.Name())
+		}
+
 		if len(jsonName) > 0 {
 			if jsonName == "status" {
 				continue
@@ -133,7 +174,7 @@ type OperatorConfig struct {
 }
 
 type GuideYaml struct {
-	ClusterConfig []OperatorConfig `yaml:"cluster_conf"`
+	ClusterConfig []OperatorConfig `yaml:"ClusterDefinition"`
 }
 
 func main() {
@@ -142,10 +183,10 @@ func main() {
 	check(err)
 	guide := GuideYaml{}
 	yaml.Unmarshal(yamlFile, &guide)
-	fmt.Println(fmt.Sprintf("Found %d cluster_info rules", len(guide.ClusterConfig)))
+	fmt.Println(fmt.Sprintf("Found %d ClusterDefinition rules", len(guide.ClusterConfig)))
 
-	outputDir := "../operator0-java-gen/src/main/java"
-	basePkg := "operator0.gen"
+	outputDir := "../circe-java-gen/src/main/java"
+	basePkg := "com.redhat.openshift.circe.gen"
 	basePackageDir := path.Join(outputDir, strings.Replace(basePkg, ".", "/", -1))
 
 	astFiles := make([]*ast.File, 0)
@@ -157,7 +198,8 @@ func main() {
 		astFiles = append(astFiles, f)
 	}
 
-	var conf types.Config
+	importer := myimporter{}
+	conf := types.Config{Importer: importer}
 	conf.Error = func(err error) {
 		log.Println("Error during check: ", err)
 	}
@@ -183,7 +225,7 @@ func main() {
 
 		scope := pkg.Scope()
 		obj := scope.Lookup(oc.GoType)
-		fmt.Println("Loaded", oc.GoType, "=>", obj)
+		fmt.Println("Loaded", oc.GoType, "=>", obj.String())
 		named := obj.Type().(*types.Named)  // .Type() returns the type of the language element. We assume it is a named type.
 		underlyingStruct := named.Underlying().(*types.Struct) // The underlying type of the object should be a struct
 		structName := obj.Name() // obj.Name()  example: "NetworkConfig"
@@ -210,7 +252,7 @@ func main() {
 		jw.WriteString("import " + packageName + ".*;\n")
 	}
 
-	jw.WriteString("public interface ClusterDefinition {\n\n")
+	jw.WriteString("\npublic interface ClusterDefinition {\n\n")
 	for _, oc := range guide.ClusterConfig {
 		jw.WriteString("\t" + oc.GoType + " get" + oc.GoType + "();\n\n")
 	}
@@ -219,3 +261,6 @@ func main() {
 
 	return
 }
+
+
+
