@@ -5,10 +5,10 @@ import "os"
 import "log"
 import "fmt"
 import "strings"
-import "path/filepath"
 import "path"
 import "reflect"
 import "io/ioutil"
+import "errors"
 
 import "go/parser"
 import "go/token"
@@ -16,10 +16,11 @@ import "go/ast"
 import "go/types"
 import "unicode"
 
-import "gopkg.in/yaml.v2"
+import (
+	"gopkg.in/yaml.v2"
+)
 
 var outputDone = make(map[string]bool)
-var pkgDir string
 
 func check(e error) {
 	if e != nil {
@@ -27,11 +28,53 @@ func check(e error) {
 	}
 }
 
-type myimporter struct {}
+type dynimporter struct {}
 
-func (importer myimporter) Import(path string) (*types.Package, error) {
-	fmt.Println("Received request for import of: " + path)
-	return nil, nil
+var imported map[string]*types.Package = make(map[string]*types.Package)
+
+func (importer dynimporter) Import(path string) (*types.Package, error) {
+
+	if v, ok := imported[path]; ok {
+		return v, nil
+	}
+
+	fmt.Println("\n\nProcessing import", path)
+	if (!strings.HasPrefix(path, "github.com/") && !strings.Contains(path, "k8s")) {
+		fmt.Println("SKIPPING!", path)
+		return nil, errors.New("Skipping since it is outside k8s/openshift")
+	}
+
+	fsetBase := token.NewFileSet()
+	asts, err := parser.ParseDir(fsetBase, "/home/jupierce/go/src/" + path, nil, parser.ParseComments)
+
+	conf := types.Config{IgnoreFuncBodies: true, Importer:importer, DisableUnusedImportCheck: true}
+	conf.Error = func(err error) {
+		log.Println("Error during check 2: ", err)
+	}
+
+	for name, pkgAst := range asts {
+		fmt.Printf("Processing pkgAst: %s", name)
+
+		// A package may contain, e.g. v1 and v1_test. Ignore the test package.
+		if strings.Contains(name, "_test") {
+			continue
+		}
+
+		var fs []*ast.File
+
+		for _, f := range pkgAst.Files {
+			fs = append(fs, f)
+		}
+
+		pkg, err := conf.Check(path, fsetBase, fs, nil)
+		if err != nil {
+			log.Println("Overall check error 2: ", err)
+		}
+		imported[path] = pkg
+		return pkg, nil
+	}
+
+	return nil, err
 }
 
 func toLowerCamelcase(name string) string {
@@ -63,14 +106,24 @@ func toLowerCamelcase(name string) string {
 }
 
 type StructGen struct {
-	pkgDir string
-	pkg    string
+	goPkgDir      string
+	javaPkgDir    string
+	pkg           string
+	kubeGroup     string
+	kubeNamespace string
+	kubeName      string
 }
 
 func (sg *StructGen) getJavaType(typ types.Type) string {
 	typeSplit := strings.Split(typ.String(), ".")
 	typeName := typeSplit[len(typeSplit) - 1]   // networkingconfig_types.NetworkConfig -> NetworkConfig ;  uint32 -> uint32
 	typeName = strings.Trim(typeName, "*") // ignore pointer vs non-pointer
+
+	fmt.Println("Attempt to coerce type to java: " + typeName)
+
+	if typeName == "RawExtension" {
+		return "String"
+	}
 
 	switch ct := typ.(type) {
 	case *types.Basic:
@@ -84,6 +137,7 @@ func (sg *StructGen) getJavaType(typ types.Type) string {
 		} else if strings.HasPrefix(typeName, "float") {
 			return "Double"
 		} else {
+			panic(fmt.Sprintf("I don't know how to translate: %s %T", ct.String(), typ))
 			panic("I don't know how to translate type: " + typeName)
 		}
 
@@ -119,7 +173,7 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 		outputDone[structName] = true
 	}
 
-	javaFile, err := os.OpenFile(path.Join(sg.pkgDir, structName + ".java"), os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
+	javaFile, err := os.OpenFile(path.Join(sg.javaPkgDir, structName + ".java"), os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
 	check(err)
 
 	defer javaFile.Close()
@@ -135,7 +189,27 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 	for fi := 0; fi < underlyingStruct.NumFields(); fi++ {
 		fieldVar := underlyingStruct.Field(fi)
 		fmt.Println(fmt.Sprintf("Processing field: %s", fieldVar))
-		javaType := sg.getJavaType(fieldVar.Type())
+
+		fmt.Printf("Testing: %s\n", fieldVar.Type().String())
+
+		if strings.HasSuffix(fieldVar.Type().String(), "TypeMeta") {
+			fmt.Println("Skipping TypeMeta")
+			jw.WriteString(fmt.Sprintf("\tdefault String getKind() { return %q; }\n", structName))
+			goPkgSplit := strings.Split(strings.TrimRight(sg.goPkgDir, "/"), "/")
+			apiVersion := goPkgSplit[len(goPkgSplit)-1]
+			if len(sg.kubeGroup) > 0 {
+				apiVersion = sg.kubeGroup + "/" + apiVersion
+			}
+			jw.WriteString(fmt.Sprintf("\tdefault String getApiVersion() { return %q; }\n", apiVersion))
+			continue
+		}
+
+
+		if strings.HasSuffix(fieldVar.Type().String(), "ObjectMeta") {
+			fmt.Println("Skipping ObjectMeta")
+			jw.WriteString(fmt.Sprintf("\tdefault ObjectMeta getMetadata() { return new ObjectMeta(%q, %q); }\n", sg.kubeNamespace, sg.kubeName))
+			continue
+		}
 
 		var tag reflect.StructTag = reflect.StructTag(underlyingStruct.Tag(fi))
 		jsonTag := tag.Get("json")
@@ -146,11 +220,13 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 		}
 
 		if len(jsonName) > 0 {
+			fmt.Println("Found jsonName: ", jsonName)
 			if jsonName == "status" {
+				fmt.Println("Skipping status field")
 				continue
 			}
-			fmt.Println("Found jsonName: ", jsonName)
 
+			javaType := sg.getJavaType(fieldVar.Type())
 			jw.WriteString(fmt.Sprintf("\t//json:%s\n", jsonName))
 			jw.WriteString(fmt.Sprintf("\t%s get%s();\n", javaType, fieldVar.Name()))  // close 'public interface ... {'
 		} else {
@@ -167,61 +243,50 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 }
 
 type OperatorConfig struct {
-	File string `yaml:"file"`
-	GoType string `yaml:"go_type"`
-	KubeName string `yaml:"kube_name"`
-	Namespace string `yaml:"namespace"`
+	PkgDir        string `yaml:"package"`
+	GoType        string `yaml:"go_type"`
+	KubeGroup      string `yaml:"kube_group"`
+	KubeName      string `yaml:"kube_name"`
+	KubeNamespace string `yaml:"kube_namespace"`
 }
 
 type GuideYaml struct {
-	ClusterConfig []OperatorConfig `yaml:"ClusterDefinition"`
+	ClusterDefinition []OperatorConfig `yaml:"ClusterDefinition"`
 }
 
 func main() {
+
+	/*
+	d := dynimporter{}
+	pkg, err := d.Import("sigs.k8s.io/cluster-api/pkg/apis/cluster/v1alpha1")
+	fmt.Printf("%v\n", pkg.Scope().Lookup("MachineSet"))
+	os.Exit(1)
+	*/
 
 	yamlFile, err := ioutil.ReadFile("guide.yaml")
 	check(err)
 	guide := GuideYaml{}
 	yaml.Unmarshal(yamlFile, &guide)
-	fmt.Println(fmt.Sprintf("Found %d ClusterDefinition rules", len(guide.ClusterConfig)))
+	fmt.Println(fmt.Sprintf("Found %d ClusterDefinition rules", len(guide.ClusterDefinition)))
 
 	outputDir := "../circe-java-gen/src/main/java"
 	basePkg := "com.redhat.openshift.circe.gen"
 	basePackageDir := path.Join(outputDir, strings.Replace(basePkg, ".", "/", -1))
 
-	astFiles := make([]*ast.File, 0)
-
-	fset := token.NewFileSet()
-	for _, oc := range guide.ClusterConfig {
-		f, err := parser.ParseFile(fset, oc.File, nil, parser.ParseComments)
-		check(err)
-		astFiles = append(astFiles, f)
-	}
-
-	importer := myimporter{}
-	conf := types.Config{Importer: importer}
-	conf.Error = func(err error) {
-		log.Println("Error during check: ", err)
-	}
-
-	pkg, err := conf.Check("parse", fset, astFiles, nil)
-	if err != nil {
-		log.Println("Overall check error: ", err)
-	}
-
+	d := dynimporter{}
 	packageNames := make([]string, 0)
 
-	for _, oc := range guide.ClusterConfig {
-		filename := oc.File
+	for _, oc := range guide.ClusterDefinition {
+		goPkgDir := oc.PkgDir
+		pkg, err := d.Import(goPkgDir)
+		check(err)
 
-		shortPkgName := filepath.Base(filename)
-		shortPkgName = strings.TrimSuffix(shortPkgName, ".go")
+		shortPkgName := strings.ToLower(oc.GoType)
 		packageName := fmt.Sprintf("%s.%s", basePkg, shortPkgName)
 		packageNames = append(packageNames, packageName)
 
-		pkgDir = path.Join(basePackageDir, shortPkgName)
-		os.MkdirAll(pkgDir, 0750)
-
+		javaPkgDir := path.Join(basePackageDir, shortPkgName)
+		os.MkdirAll(javaPkgDir, 0750)
 
 		scope := pkg.Scope()
 		obj := scope.Lookup(oc.GoType)
@@ -231,11 +296,31 @@ func main() {
 		structName := obj.Name() // obj.Name()  example: "NetworkConfig"
 
 		sg := StructGen{
-			pkgDir:pkgDir,
-			pkg:packageName,
+			goPkgDir: goPkgDir,
+			javaPkgDir: javaPkgDir,
+			pkg: packageName,
+			kubeGroup: oc.KubeGroup,
+			kubeNamespace: oc.KubeNamespace,
+			kubeName: oc.KubeName,
 		}
 
 		sg.outputStruct(structName, underlyingStruct)
+
+		// Output ObjectMeta definition to package directory
+		javaFile, err := os.OpenFile(path.Join(sg.javaPkgDir, "ObjectMeta.java"), os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
+		check(err)
+		jw := bufio.NewWriter(javaFile)
+
+		jw.WriteString(fmt.Sprintf("package %s;\n\n", sg.pkg))
+
+		jw.WriteString("public class ObjectMeta {\n")
+		jw.WriteString("	private final String name, namespace;\n")
+		jw.WriteString("	public ObjectMeta(String namespace, String name) { this.name = name; this.namespace = namespace; }\n")
+		jw.WriteString("	public String getNamespace() { return this.namespace; }\n")
+		jw.WriteString("	public String getName() { return this.name; }\n")
+		jw.WriteString("}\n")
+		jw.Flush()
+		javaFile.Close()
 	}
 
 	javaFile, err := os.OpenFile(path.Join(basePackageDir, "ClusterDefinition.java"), os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
@@ -253,7 +338,7 @@ func main() {
 	}
 
 	jw.WriteString("\npublic interface ClusterDefinition {\n\n")
-	for _, oc := range guide.ClusterConfig {
+	for _, oc := range guide.ClusterDefinition {
 		jw.WriteString("\t" + oc.GoType + " get" + oc.GoType + "();\n\n")
 	}
 	jw.WriteString("\n}\n")

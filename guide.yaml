@@ -1,11 +1,21 @@
 ClusterDefinition:
 
-- file: types/networkconfig_types.go
-  go_type: NetworkConfig
-  kube_name: default
-
-- file: types/tuned_types.go
+- package: github.com/openshift/cluster-node-tuning-operator/pkg/apis/tuned/v1alpha1/
   go_type: Tuned
   kube_name: default
   namespace: openshift-cluster-node-tuning-operator
 
+- package: sigs.k8s.io/cluster-api/pkg/apis/cluster/v1alpha1
+  go_type: MachineSet
+  kube_name: default
+  kube_namespace: openshift-cluster-node-tuning-operator
+
+- package: github.com/openshift/api/config/v1
+  go_type: Project
+  kube_group: config.openshift.io
+  kube_name: cluster
+  kube_namespace: openshift-config
+
+- package: github.com/openshift/cluster-network-operator/pkg/apis/networkoperator/v1
+  go_type: NetworkConfig
+  kube_name: default
