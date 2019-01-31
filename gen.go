@@ -8,6 +8,7 @@ import "strings"
 import "path"
 import "reflect"
 import "io/ioutil"
+import "io"
 import "errors"
 
 import "go/parser"
@@ -105,13 +106,37 @@ func toLowerCamelcase(name string) string {
 	return string(newRunes)
 }
 
+func copy(src, dst string) (int64, error) {
+        sourceFileStat, err := os.Stat(src)
+        if err != nil {
+                return 0, err
+        }
+
+        if !sourceFileStat.Mode().IsRegular() {
+                return 0, fmt.Errorf("%s is not a regular file", src)
+        }
+
+        source, err := os.Open(src)
+        if err != nil {
+                return 0, err
+        }
+        defer source.Close()
+
+        destination, err := os.Create(dst)
+        if err != nil {
+                return 0, err
+        }
+        defer destination.Close()
+        nBytes, err := io.Copy(destination, source)
+        return nBytes, err
+}
+
 type StructGen struct {
 	goPkgDir      string
 	javaPkgDir    string
 	pkg           string
-	kubeGroup     string
-	kubeNamespace string
-	kubeName      string
+	implPkg           string
+	config        OperatorConfig
 }
 
 func (sg *StructGen) getJavaType(typ types.Type) string {
@@ -123,6 +148,10 @@ func (sg *StructGen) getJavaType(typ types.Type) string {
 
 	if typeName == "RawExtension" {
 		return "String"
+	}
+
+	if typeName == "Quantity" {
+		return "Quantity"
 	}
 
 	switch ct := typ.(type) {
@@ -182,6 +211,7 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 
 	jw.WriteString(fmt.Sprintf("package %s;\n\n", sg.pkg))
 
+	jw.WriteString("import " + sg.implPkg + ".*;\n")
 	jw.WriteString("import java.util.*;\n\n")
 
 	jw.WriteString(fmt.Sprintf("public interface %s {\n", structName))
@@ -196,9 +226,16 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 			fmt.Println("Skipping TypeMeta")
 			jw.WriteString(fmt.Sprintf("\tdefault String getKind() { return %q; }\n", structName))
 			goPkgSplit := strings.Split(strings.TrimRight(sg.goPkgDir, "/"), "/")
-			apiVersion := goPkgSplit[len(goPkgSplit)-1]
-			if len(sg.kubeGroup) > 0 {
-				apiVersion = sg.kubeGroup + "/" + apiVersion
+			apiVersion := sg.config.KubeVersion
+			if len(apiVersion) == 0 {
+				apiVersion = goPkgSplit[len(goPkgSplit)-1]
+				if strings.HasPrefix(apiVersion, "v") == false {
+					panic("Unable to autodetect apiVersion for package (add kube_version in guide.yaml): " + sg.config.PkgDir)
+				}
+			}
+
+			if len(sg.config.KubeGroup) > 0 {
+				apiVersion = sg.config.KubeGroup + "/" + apiVersion
 			}
 			jw.WriteString(fmt.Sprintf("\tdefault String getApiVersion() { return %q; }\n", apiVersion))
 			continue
@@ -207,9 +244,19 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 
 		if strings.HasSuffix(fieldVar.Type().String(), "ObjectMeta") {
 			fmt.Println("Skipping ObjectMeta")
-			jw.WriteString(fmt.Sprintf("\tdefault ObjectMeta getMetadata() { return new ObjectMeta(%q, %q); }\n", sg.kubeNamespace, sg.kubeName))
+			jw.WriteString(fmt.Sprintf("\tdefault ObjectMeta getMetadata() { return new ObjectMeta(%q, %q); }\n", sg.config.KubeNamespace, sg.config.KubeName))
 			continue
 		}
+
+		if strings.HasSuffix(fieldVar.Type().String(), "runtime.Object") {
+			if strings.HasPrefix(fieldVar.Type().String(), "[]") {
+				jw.WriteString(fmt.Sprintf("\t%s get%s();\n", "List<YamlProvider>", fieldVar.Name()))
+			} else {
+				jw.WriteString(fmt.Sprintf("\t%s get%s();\n", "YamlProvider", fieldVar.Name()))
+			}
+			continue
+		}
+
 
 		var tag reflect.StructTag = reflect.StructTag(underlyingStruct.Tag(fi))
 		jsonTag := tag.Get("json")
@@ -246,12 +293,19 @@ type OperatorConfig struct {
 	PkgDir        string `yaml:"package"`
 	GoType        string `yaml:"go_type"`
 	KubeGroup      string `yaml:"kube_group"`
+	KubeVersion      string `yaml:"kube_version"`
 	KubeName      string `yaml:"kube_name"`
 	KubeNamespace string `yaml:"kube_namespace"`
+	PackageOnly bool `yaml:"package_only"`
 }
 
+type Unit struct {
+	Elements []OperatorConfig `yaml:"elements"`
+}
+
+
 type GuideYaml struct {
-	ClusterDefinition []OperatorConfig `yaml:"ClusterDefinition"`
+	Units map[string]Unit `yaml:"units"`
 }
 
 func main() {
@@ -267,82 +321,84 @@ func main() {
 	check(err)
 	guide := GuideYaml{}
 	yaml.Unmarshal(yamlFile, &guide)
-	fmt.Println(fmt.Sprintf("Found %d ClusterDefinition rules", len(guide.ClusterDefinition)))
+	fmt.Println(fmt.Sprintf("Found %d ClusterDefinition rules", len(guide.Units)))
 
 	outputDir := "../circe-java-gen/src/main/java"
 	basePkg := "com.redhat.openshift.circe.gen"
 	basePackageDir := path.Join(outputDir, strings.Replace(basePkg, ".", "/", -1))
+	implPkg := "com.redhat.openshift.circe.gen.impl"
+	implPackageDir := path.Join(outputDir, strings.Replace(implPkg, ".", "/", -1))
 
 	d := dynimporter{}
 	packageNames := make([]string, 0)
 
-	for _, oc := range guide.ClusterDefinition {
-		goPkgDir := oc.PkgDir
-		pkg, err := d.Import(goPkgDir)
-		check(err)
+	for name, unit := range guide.Units {
+		fmt.Println("Generating unit: " + name)
+		for _, oc := range unit.Elements {
+			goPkgDir := oc.PkgDir
+			pkg, err := d.Import(goPkgDir)
+			check(err)
 
-		shortPkgName := strings.ToLower(oc.GoType)
-		packageName := fmt.Sprintf("%s.%s", basePkg, shortPkgName)
-		packageNames = append(packageNames, packageName)
+			shortPkgName := strings.ToLower(oc.GoType)
+			packageName := fmt.Sprintf("%s.%s", basePkg, shortPkgName)
+			packageNames = append(packageNames, packageName)
 
-		javaPkgDir := path.Join(basePackageDir, shortPkgName)
-		os.MkdirAll(javaPkgDir, 0750)
+			javaPkgDir := path.Join(basePackageDir, shortPkgName)
+			os.MkdirAll(javaPkgDir, 0750)
 
-		scope := pkg.Scope()
-		obj := scope.Lookup(oc.GoType)
-		fmt.Println("Loaded", oc.GoType, "=>", obj.String())
-		named := obj.Type().(*types.Named)  // .Type() returns the type of the language element. We assume it is a named type.
-		underlyingStruct := named.Underlying().(*types.Struct) // The underlying type of the object should be a struct
-		structName := obj.Name() // obj.Name()  example: "NetworkConfig"
+			scope := pkg.Scope()
+			obj := scope.Lookup(oc.GoType)
+			fmt.Println("Loaded", oc.GoType, "=>", obj.String())
+			named := obj.Type().(*types.Named)  // .Type() returns the type of the language element. We assume it is a named type.
+			underlyingStruct := named.Underlying().(*types.Struct) // The underlying type of the object should be a struct
+			structName := obj.Name() // obj.Name()  example: "NetworkConfig"
 
-		sg := StructGen{
-			goPkgDir: goPkgDir,
-			javaPkgDir: javaPkgDir,
-			pkg: packageName,
-			kubeGroup: oc.KubeGroup,
-			kubeNamespace: oc.KubeNamespace,
-			kubeName: oc.KubeName,
+			sg := StructGen{
+				goPkgDir: goPkgDir,
+				javaPkgDir: javaPkgDir,
+				pkg: packageName,
+				implPkg: implPkg,
+				config: oc,
+			}
+
+			sg.outputStruct(structName, underlyingStruct)
+
 		}
 
-		sg.outputStruct(structName, underlyingStruct)
-
-		// Output ObjectMeta definition to package directory
-		javaFile, err := os.OpenFile(path.Join(sg.javaPkgDir, "ObjectMeta.java"), os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
+		javaFile, err := os.OpenFile(path.Join(basePackageDir, name + ".java"), os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
 		check(err)
+
 		jw := bufio.NewWriter(javaFile)
+		jw.WriteString("package " + basePkg + ";\n\n")
 
-		jw.WriteString(fmt.Sprintf("package %s;\n\n", sg.pkg))
+		jw.WriteString("import java.util.*;\n")
 
-		jw.WriteString("public class ObjectMeta {\n")
-		jw.WriteString("	private final String name, namespace;\n")
-		jw.WriteString("	public ObjectMeta(String namespace, String name) { this.name = name; this.namespace = namespace; }\n")
-		jw.WriteString("	public String getNamespace() { return this.namespace; }\n")
-		jw.WriteString("	public String getName() { return this.name; }\n")
-		jw.WriteString("}\n")
+		for _, packageName := range packageNames {
+			jw.WriteString("import " + packageName + ".*;\n")
+		}
+
+		jw.WriteString("import " + implPkg + ".*;\n")
+
+		jw.WriteString("\npublic interface " + name + " {\n\n")
+		for _, oc := range unit.Elements {
+			if oc.PackageOnly == false {
+				jw.WriteString("\t" + oc.GoType + " get" + oc.GoType + "();\n\n")
+			}
+		}
+		jw.WriteString("\n}\n")
 		jw.Flush()
 		javaFile.Close()
 	}
 
-	javaFile, err := os.OpenFile(path.Join(basePackageDir, "ClusterDefinition.java"), os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
+	// Output ObjectMeta helper and other impl classes
+	os.MkdirAll(implPackageDir, 0750)
+	dir, err := os.Getwd()
 	check(err)
 
-	defer javaFile.Close()
-
-	jw := bufio.NewWriter(javaFile)
-	jw.WriteString("package " + basePkg + ";\n\n")
-
-	jw.WriteString("import java.util.*;\n")
-
-	for _, packageName := range packageNames {
-		jw.WriteString("import " + packageName + ".*;\n")
-	}
-
-	jw.WriteString("\npublic interface ClusterDefinition {\n\n")
-	for _, oc := range guide.ClusterDefinition {
-		jw.WriteString("\t" + oc.GoType + " get" + oc.GoType + "();\n\n")
-	}
-	jw.WriteString("\n}\n")
-	jw.Flush()
+	_, err = copy( path.Join(dir, "src/render/java", strings.Replace(implPkg, ".", "/", -1), "ObjectMeta.java"), path.Join(implPackageDir, "ObjectMeta.java"))
+	check(err)
+	_, err = copy( path.Join(dir, "src/render/java", strings.Replace(implPkg, ".", "/", -1), "BaseObject.java"), path.Join(implPackageDir, "BaseObject.java"))
+	check(err)
 
 	return
 }
