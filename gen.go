@@ -132,11 +132,11 @@ func copy(src, dst string) (int64, error) {
 }
 
 type StructGen struct {
-	goPkgDir      string
-	javaPkgDir    string
-	pkg           string
-	implPkg           string
-	config        OperatorConfig
+	goPkgDir   string
+	javaPkgDir string
+	pkg        string
+	beanPkg    string
+	config     OperatorConfig
 }
 
 func (sg *StructGen) getJavaType(typ types.Type) string {
@@ -211,7 +211,7 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 
 	jw.WriteString(fmt.Sprintf("package %s;\n\n", sg.pkg))
 
-	jw.WriteString("import " + sg.implPkg + ".*;\n")
+	jw.WriteString("import " + sg.beanPkg + ".*;\n")
 	jw.WriteString("import com.redhat.openshift.circe.yaml.Bean;\n")
 	jw.WriteString("import java.util.*;\n\n")
 
@@ -324,11 +324,10 @@ func main() {
 	yaml.Unmarshal(yamlFile, &guide)
 	fmt.Println(fmt.Sprintf("Found %d ClusterDefinition rules", len(guide.Units)))
 
-	outputDir := "../circe-java-gen/src/main/java"
+	outputDir := "render/src/generated/java"
 	basePkg := "com.redhat.openshift.circe.gen"
 	basePackageDir := path.Join(outputDir, strings.Replace(basePkg, ".", "/", -1))
-	implPkg := "com.redhat.openshift.circe.gen.impl"
-	implPackageDir := path.Join(outputDir, strings.Replace(implPkg, ".", "/", -1))
+	beanPkg := "com.redhat.openshift.circe.beans"
 
 	d := dynimporter{}
 	packageNames := make([]string, 0)
@@ -358,7 +357,7 @@ func main() {
 				goPkgDir: goPkgDir,
 				javaPkgDir: javaPkgDir,
 				pkg: packageName,
-				implPkg: implPkg,
+				beanPkg: beanPkg,
 				config: oc,
 			}
 
@@ -378,7 +377,7 @@ func main() {
 			jw.WriteString("import " + packageName + ".*;\n")
 		}
 
-		jw.WriteString("import " + implPkg + ".*;\n")
+		jw.WriteString("import " + beanPkg + ".*;\n")
 
 		jw.WriteString("\npublic interface " + name + " {\n\n")
 		for _, oc := range unit.Elements {
@@ -390,16 +389,6 @@ func main() {
 		jw.Flush()
 		javaFile.Close()
 	}
-
-	// Output ObjectMeta helper and other impl classes
-	os.MkdirAll(implPackageDir, 0750)
-	dir, err := os.Getwd()
-	check(err)
-
-	_, err = copy( path.Join(dir, "src/render/java", strings.Replace(implPkg, ".", "/", -1), "ObjectMeta.java"), path.Join(implPackageDir, "ObjectMeta.java"))
-	check(err)
-	_, err = copy( path.Join(dir, "src/render/java", strings.Replace(implPkg, ".", "/", -1), "BaseObject.java"), path.Join(implPackageDir, "BaseObject.java"))
-	check(err)
 
 	return
 }

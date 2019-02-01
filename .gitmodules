@@ -1,0 +1,3 @@
+[submodule "render"]
+	path = render
+	url = git@github.com:jupierce/circe-render.git
