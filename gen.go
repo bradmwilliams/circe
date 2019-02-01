@@ -21,8 +21,6 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-var outputDone = make(map[string]bool)
-
 func check(e error) {
 	if e != nil {
 		panic(e)
@@ -155,6 +153,7 @@ type StructGen struct {
 	pkg        string
 	beanPkg    string
 	config     OperatorConfig
+	outputDone map[string]bool
 }
 
 func (sg *StructGen) getJavaType(typ types.Type) string {
@@ -212,12 +211,12 @@ func (sg *StructGen) getJavaType(typ types.Type) string {
 
 func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Struct) {
 
-	_, ok := outputDone[structName]
+	_, ok := sg.outputDone[structName]
 	if ok {
-		// if the struct has already been output
+		// if the struct has already been output for this package
 		return
 	} else {
-		outputDone[structName] = true
+		sg.outputDone[structName] = true
 	}
 
 	javaFile, err := os.OpenFile(path.Join(sg.javaPkgDir, structName + ".java"), os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
@@ -230,7 +229,7 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 	jw.WriteString(fmt.Sprintf("package %s;\n\n", sg.pkg))
 
 	jw.WriteString("import " + sg.beanPkg + ".*;\n")
-	jw.WriteString("import com.redhat.openshift.circe.yaml.Bean;\n")
+	jw.WriteString("import com.github.openshift.circe.yaml.Bean;\n")
 	jw.WriteString("import java.util.*;\n\n")
 
 	jw.WriteString(fmt.Sprintf("public interface %s extends Bean {\n", structName))
@@ -316,6 +315,7 @@ type OperatorConfig struct {
 }
 
 type Unit struct {
+	Name        string `yaml:"name"`
 	Elements    []OperatorConfig `yaml:"elements"`
 	JavaImports []string  `yaml:"imports"`
 }
@@ -333,9 +333,9 @@ func main() {
 	fmt.Println(fmt.Sprintf("Found %d ClusterDefinition rules", len(guide.Units)))
 
 	outputDir := "render/src/generated/java"
-	basePkg := "com.redhat.openshift.circe.gen"
+	basePkg := "com.github.openshift.circe.gen"
 	basePackageDir := path.Join(outputDir, strings.Replace(basePkg, ".", "/", -1))
-	beanPkg := "com.redhat.openshift.circe.beans"
+	beanPkg := "com.github.openshift.circe.beans"
 
 	gopath := os.Getenv("GOPATH")
 	if len(gopath) == 0 {
@@ -349,8 +349,30 @@ func main() {
 
 	packageNames := make([]string, 0)
 
-	for name, unit := range guide.Units {
-		fmt.Println("Generating unit: " + name)
+
+	unitsJavaFile, err := os.OpenFile(path.Join(basePackageDir, "ConfigUnit.java"), os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
+	check(err)
+
+	unitWriter := bufio.NewWriter(unitsJavaFile)
+	unitWriter.WriteString("package " + basePkg + ";\n\n")
+
+	unitWriter.WriteString("\npublic enum ConfigUnit {\n\n")
+	for className, unit := range guide.Units {
+		unitWriter.WriteString("\t" + unit.Name + "(" + className + ".class),\n")
+	}
+	unitWriter.WriteString("\t;\n\n") // end the enum element list
+
+	unitWriter.WriteString("\tpublic Class<?> mustImplementClass;\n\n" );
+
+	unitWriter.WriteString("\tConfigUnit(Class<?> mustImplementClass) { this.mustImplementClass = mustImplementClass; }\n" );
+
+	unitWriter.WriteString("\n}\n")
+	unitWriter.Flush()
+	unitsJavaFile.Close()
+
+
+	for className, unit := range guide.Units {
+		fmt.Println("Generating unit: " + className)
 		for _, oc := range unit.Elements {
 			goPkgDir := oc.PkgDir
 			pkg, err := d.Import(goPkgDir)
@@ -377,13 +399,14 @@ func main() {
 				pkg: packageName,
 				beanPkg: beanPkg,
 				config: oc,
+				outputDone: make(map[string]bool),
 			}
 
 			sg.outputStruct(structName, underlyingStruct)
 
 		}
 
-		javaFile, err := os.OpenFile(path.Join(basePackageDir, name + ".java"), os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
+		javaFile, err := os.OpenFile(path.Join(basePackageDir, className + ".java"), os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
 		check(err)
 
 		jw := bufio.NewWriter(javaFile)
@@ -397,7 +420,7 @@ func main() {
 
 		jw.WriteString("import " + beanPkg + ".*;\n")
 
-		jw.WriteString("\npublic interface " + name + " {\n\n")
+		jw.WriteString("\npublic interface " + className + " {\n\n")
 		for _, oc := range unit.Elements {
 			if oc.PackageOnly == false {
 				jw.WriteString("\t" + oc.GoType + " get" + oc.GoType + "() throws Exception;\n\n")
