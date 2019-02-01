@@ -212,9 +212,10 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 	jw.WriteString(fmt.Sprintf("package %s;\n\n", sg.pkg))
 
 	jw.WriteString("import " + sg.implPkg + ".*;\n")
+	jw.WriteString("import com.redhat.openshift.circe.yaml.Bean;\n")
 	jw.WriteString("import java.util.*;\n\n")
 
-	jw.WriteString(fmt.Sprintf("public interface %s {\n", structName))
+	jw.WriteString(fmt.Sprintf("public interface %s extends Bean {\n", structName))
 
 	for fi := 0; fi < underlyingStruct.NumFields(); fi++ {
 		fieldVar := underlyingStruct.Field(fi)
@@ -244,15 +245,15 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 
 		if strings.HasSuffix(fieldVar.Type().String(), "ObjectMeta") {
 			fmt.Println("Skipping ObjectMeta")
-			jw.WriteString(fmt.Sprintf("\tdefault ObjectMeta getMetadata() { return new ObjectMeta(%q, %q); }\n", sg.config.KubeNamespace, sg.config.KubeName))
+			jw.WriteString(fmt.Sprintf("\tdefault ObjectMeta getMetadata() throws Exception { return new ObjectMeta(%q, %q); }\n", sg.config.KubeNamespace, sg.config.KubeName))
 			continue
 		}
 
 		if strings.HasSuffix(fieldVar.Type().String(), "runtime.Object") {
 			if strings.HasPrefix(fieldVar.Type().String(), "[]") {
-				jw.WriteString(fmt.Sprintf("\t%s get%s();\n", "List<YamlProvider>", fieldVar.Name()))
+				jw.WriteString(fmt.Sprintf("\t%s get%s() throws Exception;\n", "List<Bean>", fieldVar.Name()))
 			} else {
-				jw.WriteString(fmt.Sprintf("\t%s get%s();\n", "YamlProvider", fieldVar.Name()))
+				jw.WriteString(fmt.Sprintf("\t%s get%s() throws Exception;\n", "Bean", fieldVar.Name()))
 			}
 			continue
 		}
@@ -275,7 +276,7 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 
 			javaType := sg.getJavaType(fieldVar.Type())
 			jw.WriteString(fmt.Sprintf("\t//json:%s\n", jsonName))
-			jw.WriteString(fmt.Sprintf("\t%s get%s();\n", javaType, fieldVar.Name()))  // close 'public interface ... {'
+			jw.WriteString(fmt.Sprintf("\t%s get%s() throws Exception;\n", javaType, fieldVar.Name()))  // close 'public interface ... {'
 		} else {
 			panic(fmt.Sprintf("Unable to find json name for: %s", fieldVar.String()))
 		}
@@ -382,7 +383,7 @@ func main() {
 		jw.WriteString("\npublic interface " + name + " {\n\n")
 		for _, oc := range unit.Elements {
 			if oc.PackageOnly == false {
-				jw.WriteString("\t" + oc.GoType + " get" + oc.GoType + "();\n\n")
+				jw.WriteString("\t" + oc.GoType + " get" + oc.GoType + "() throws Exception;\n\n")
 			}
 		}
 		jw.WriteString("\n}\n")

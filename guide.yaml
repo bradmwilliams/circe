@@ -1,21 +1,45 @@
-ClusterDefinition:
+units:
 
-- package: github.com/openshift/cluster-node-tuning-operator/pkg/apis/tuned/v1alpha1/
-  go_type: Tuned
-  kube_name: default
-  namespace: openshift-cluster-node-tuning-operator
+  ClusterDefinition:
+    elements:
+    - package: github.com/openshift/cluster-node-tuning-operator/pkg/apis/tuned/v1alpha1/
+      go_type: Tuned
+      kube_name: default
+      namespace: openshift-cluster-node-tuning-operator
 
-- package: sigs.k8s.io/cluster-api/pkg/apis/cluster/v1alpha1
-  go_type: MachineSet
-  kube_name: default
-  kube_namespace: openshift-cluster-node-tuning-operator
+    - package: sigs.k8s.io/cluster-api/pkg/apis/cluster/v1alpha1
+      go_type: MachineSet
+      kube_name: default
+      kube_namespace: openshift-cluster-node-tuning-operator
 
-- package: github.com/openshift/api/config/v1
-  go_type: Project
-  kube_group: config.openshift.io
-  kube_name: cluster
-  kube_namespace: openshift-config
+    - package: github.com/openshift/cluster-network-operator/pkg/apis/networkoperator/v1
+      go_type: NetworkConfig
+      kube_name: default
 
-- package: github.com/openshift/cluster-network-operator/pkg/apis/networkoperator/v1
-  go_type: NetworkConfig
-  kube_name: default
+
+  ProjectDefinition:
+    elements:
+    - package: github.com/openshift/api/config/v1
+      go_type: Project
+      kube_group: config.openshift.io
+      kube_name: cluster
+
+    - package: github.com/openshift/origin/pkg/template/apis/template
+      go_type: Template
+      kube_group: template.openshift.io
+      kube_version: v1
+      kube_name: project-request-template
+      kube_namespace: openshift-config
+
+
+  AuthDefinition:
+    elements:
+    - package: github.com/openshift/api/config/v1
+      go_type: Authentication
+      kube_group: config.openshift.io
+      kube_name: cluster
+
+    - package: github.com/openshift/api/config/v1
+      go_type: OAuth
+      kube_group: config.openshift.io
+      kube_name: cluster
