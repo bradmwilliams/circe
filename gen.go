@@ -351,13 +351,13 @@ func main() {
 
 
 	os.MkdirAll(basePackageDir, 0750)
-	unitsJavaFile, err := os.OpenFile(path.Join(basePackageDir, "ConfigUnit.java"), os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
+	unitsJavaFile, err := os.OpenFile(path.Join(basePackageDir, "ConfigUnitType.java"), os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
 	check(err)
 
 	unitWriter := bufio.NewWriter(unitsJavaFile)
 	unitWriter.WriteString("package " + basePkg + ";\n\n")
 
-	unitWriter.WriteString("\npublic enum ConfigUnit {\n\n")
+	unitWriter.WriteString("\npublic enum ConfigUnitType {\n\n")
 	for className, unit := range guide.Units {
 		unitWriter.WriteString("\t" + unit.Name + "(" + className + ".class),\n")
 	}
@@ -365,7 +365,7 @@ func main() {
 
 	unitWriter.WriteString("\tpublic Class<?> mustImplementClass;\n\n" );
 
-	unitWriter.WriteString("\tConfigUnit(Class<?> mustImplementClass) { this.mustImplementClass = mustImplementClass; }\n" );
+	unitWriter.WriteString("\tConfigUnitType(Class<?> mustImplementClass) { this.mustImplementClass = mustImplementClass; }\n" );
 
 	unitWriter.WriteString("\n}\n")
 	unitWriter.Flush()
@@ -421,7 +421,7 @@ func main() {
 
 		jw.WriteString("import " + beanPkg + ".*;\n")
 
-		jw.WriteString("\npublic interface " + className + " {\n\n")
+		jw.WriteString("\npublic interface " + className + " extends ConfigUnit {\n\n")
 		for _, oc := range unit.Elements {
 			if oc.PackageOnly == false {
 				jw.WriteString("\t" + oc.GoType + " get" + oc.GoType + "() throws Exception;\n\n")
