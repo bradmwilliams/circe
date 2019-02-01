@@ -29,53 +29,71 @@ func check(e error) {
 	}
 }
 
-type dynimporter struct {}
+type dynimporter struct {
+	// paths which will be scanned for src/<go package> during Import
+	paths []string
+}
 
 var imported map[string]*types.Package = make(map[string]*types.Package)
 
-func (importer dynimporter) Import(path string) (*types.Package, error) {
+func (importer dynimporter) Import(goPkgName string) (*types.Package, error) {
 
-	if v, ok := imported[path]; ok {
+	if v, ok := imported[goPkgName]; ok {
 		return v, nil
 	}
 
-	fmt.Println("\n\nProcessing import", path)
-	if (!strings.HasPrefix(path, "github.com/") && !strings.Contains(path, "k8s")) {
-		fmt.Println("SKIPPING!", path)
+	fmt.Println("\n\nProcessing import", goPkgName)
+	if (!strings.HasPrefix(goPkgName, "github.com/") && !strings.Contains(goPkgName, "k8s")) {
+		fmt.Println("SKIPPING!", goPkgName)
 		return nil, errors.New("Skipping since it is outside k8s/openshift")
 	}
 
 	fsetBase := token.NewFileSet()
-	asts, err := parser.ParseDir(fsetBase, "/home/jupierce/go/src/" + path, nil, parser.ParseComments)
 
-	conf := types.Config{IgnoreFuncBodies: true, Importer:importer, DisableUnusedImportCheck: true}
-	conf.Error = func(err error) {
-		log.Println("Error during check 2: ", err)
+	for _, srcDir := range importer.paths {
+		checkDir := path.Join(srcDir, "src", goPkgName)
+		_, err := os.Stat(checkDir)
+
+		if ( err != nil ) {
+			if os.IsNotExist(err) {
+				continue;
+			} else {
+				return nil, errors.New("Error scanning for package: " + err.Error())
+			}
+		}
+
+		asts, err := parser.ParseDir(fsetBase, checkDir, nil, parser.ParseComments)
+
+		conf := types.Config{IgnoreFuncBodies: true, Importer:importer, DisableUnusedImportCheck: true}
+		conf.Error = func(err error) {
+			log.Println("Error during check 2: ", err)
+		}
+
+		for name, pkgAst := range asts {
+			fmt.Printf("Processing pkgAst: %s", name)
+
+			// A package may contain, e.g. v1 and v1_test. Ignore the test package.
+			if strings.Contains(name, "_test") {
+				continue
+			}
+
+			var fs []*ast.File
+
+			for _, f := range pkgAst.Files {
+				fs = append(fs, f)
+			}
+
+			pkg, err := conf.Check(goPkgName, fsetBase, fs, nil)
+			if err != nil {
+				log.Println("Overall check error 2: ", err)
+			}
+			imported[goPkgName] = pkg
+			return pkg, nil
+		}
+
 	}
 
-	for name, pkgAst := range asts {
-		fmt.Printf("Processing pkgAst: %s", name)
-
-		// A package may contain, e.g. v1 and v1_test. Ignore the test package.
-		if strings.Contains(name, "_test") {
-			continue
-		}
-
-		var fs []*ast.File
-
-		for _, f := range pkgAst.Files {
-			fs = append(fs, f)
-		}
-
-		pkg, err := conf.Check(path, fsetBase, fs, nil)
-		if err != nil {
-			log.Println("Overall check error 2: ", err)
-		}
-		imported[path] = pkg
-		return pkg, nil
-	}
-
-	return nil, err
+	return nil, errors.New("Unable to find source package: " + goPkgName)
 }
 
 func toLowerCamelcase(name string) string {
@@ -93,7 +111,7 @@ func toLowerCamelcase(name string) string {
 		}
 		if toggle && unicode.IsUpper(r) {
 			// If "TLSVerify", we want tlsVerify, so look ahead unless we are at the end
-			if i == 0 || len(runes) == i+1 || unicode.IsLower(runes[i+1]) == false {
+			if i == 0 || len(runes) == i + 1 || unicode.IsLower(runes[i + 1]) == false {
 				newRunes[i] = unicode.ToLower(r)
 			} else {
 				newRunes[i] = r
@@ -107,28 +125,28 @@ func toLowerCamelcase(name string) string {
 }
 
 func copy(src, dst string) (int64, error) {
-        sourceFileStat, err := os.Stat(src)
-        if err != nil {
-                return 0, err
-        }
+	sourceFileStat, err := os.Stat(src)
+	if err != nil {
+		return 0, err
+	}
 
-        if !sourceFileStat.Mode().IsRegular() {
-                return 0, fmt.Errorf("%s is not a regular file", src)
-        }
+	if !sourceFileStat.Mode().IsRegular() {
+		return 0, fmt.Errorf("%s is not a regular file", src)
+	}
 
-        source, err := os.Open(src)
-        if err != nil {
-                return 0, err
-        }
-        defer source.Close()
+	source, err := os.Open(src)
+	if err != nil {
+		return 0, err
+	}
+	defer source.Close()
 
-        destination, err := os.Create(dst)
-        if err != nil {
-                return 0, err
-        }
-        defer destination.Close()
-        nBytes, err := io.Copy(destination, source)
-        return nBytes, err
+	destination, err := os.Create(dst)
+	if err != nil {
+		return 0, err
+	}
+	defer destination.Close()
+	nBytes, err := io.Copy(destination, source)
+	return nBytes, err
 }
 
 type StructGen struct {
@@ -156,7 +174,7 @@ func (sg *StructGen) getJavaType(typ types.Type) string {
 
 	switch ct := typ.(type) {
 	case *types.Basic:
-		if strings.HasPrefix(typeName, "uint") || strings.HasPrefix(typeName, "int") || strings.HasPrefix(typeName, "rune") || strings.HasPrefix(typeName, "byte"){
+		if strings.HasPrefix(typeName, "uint") || strings.HasPrefix(typeName, "int") || strings.HasPrefix(typeName, "rune") || strings.HasPrefix(typeName, "byte") {
 			// We're not trying to match exact int size. That is left of to the user.
 			return "Long"
 		} else if typeName == "string" {
@@ -229,7 +247,7 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 			goPkgSplit := strings.Split(strings.TrimRight(sg.goPkgDir, "/"), "/")
 			apiVersion := sg.config.KubeVersion
 			if len(apiVersion) == 0 {
-				apiVersion = goPkgSplit[len(goPkgSplit)-1]
+				apiVersion = goPkgSplit[len(goPkgSplit) - 1]
 				if strings.HasPrefix(apiVersion, "v") == false {
 					panic("Unable to autodetect apiVersion for package (add kube_version in guide.yaml): " + sg.config.PkgDir)
 				}
@@ -241,7 +259,6 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 			jw.WriteString(fmt.Sprintf("\tdefault String getApiVersion() { return %q; }\n", apiVersion))
 			continue
 		}
-
 
 		if strings.HasSuffix(fieldVar.Type().String(), "ObjectMeta") {
 			fmt.Println("Skipping ObjectMeta")
@@ -257,7 +274,6 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 			}
 			continue
 		}
-
 
 		var tag reflect.StructTag = reflect.StructTag(underlyingStruct.Tag(fi))
 		jsonTag := tag.Get("json")
@@ -285,7 +301,6 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 		fmt.Println()
 	}
 
-
 	jw.WriteString("}\n")  // close 'public interface ... {'
 	jw.Flush()
 }
@@ -293,30 +308,23 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 type OperatorConfig struct {
 	PkgDir        string `yaml:"package"`
 	GoType        string `yaml:"go_type"`
-	KubeGroup      string `yaml:"kube_group"`
-	KubeVersion      string `yaml:"kube_version"`
+	KubeGroup     string `yaml:"kube_group"`
+	KubeVersion   string `yaml:"kube_version"`
 	KubeName      string `yaml:"kube_name"`
 	KubeNamespace string `yaml:"kube_namespace"`
-	PackageOnly bool `yaml:"package_only"`
+	PackageOnly   bool `yaml:"package_only"`
 }
 
 type Unit struct {
-	Elements []OperatorConfig `yaml:"elements"`
+	Elements    []OperatorConfig `yaml:"elements"`
+	JavaImports []string  `yaml:"imports"`
 }
-
 
 type GuideYaml struct {
 	Units map[string]Unit `yaml:"units"`
 }
 
 func main() {
-
-	/*
-	d := dynimporter{}
-	pkg, err := d.Import("sigs.k8s.io/cluster-api/pkg/apis/cluster/v1alpha1")
-	fmt.Printf("%v\n", pkg.Scope().Lookup("MachineSet"))
-	os.Exit(1)
-	*/
 
 	yamlFile, err := ioutil.ReadFile("guide.yaml")
 	check(err)
@@ -329,7 +337,16 @@ func main() {
 	basePackageDir := path.Join(outputDir, strings.Replace(basePkg, ".", "/", -1))
 	beanPkg := "com.redhat.openshift.circe.beans"
 
-	d := dynimporter{}
+	gopath := os.Getenv("GOPATH")
+	if len(gopath) == 0 {
+		fmt.Println("Please set GOPATH environment variable before running (colon delimited list is supported)")
+		os.Exit(1)
+	}
+
+	d := dynimporter{
+		paths: strings.Split(gopath, ":"),
+	}
+
 	packageNames := make([]string, 0)
 
 	for name, unit := range guide.Units {
@@ -341,6 +358,7 @@ func main() {
 
 			shortPkgName := strings.ToLower(oc.GoType)
 			packageName := fmt.Sprintf("%s.%s", basePkg, shortPkgName)
+			unit.JavaImports = append(unit.JavaImports, packageName)
 			packageNames = append(packageNames, packageName)
 
 			javaPkgDir := path.Join(basePackageDir, shortPkgName)
@@ -373,7 +391,7 @@ func main() {
 
 		jw.WriteString("import java.util.*;\n")
 
-		for _, packageName := range packageNames {
+		for _, packageName := range unit.JavaImports {
 			jw.WriteString("import " + packageName + ".*;\n")
 		}
 
