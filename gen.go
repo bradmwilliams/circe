@@ -350,6 +350,7 @@ func main() {
 	packageNames := make([]string, 0)
 
 
+	os.MkdirAll(basePackageDir, 0750)
 	unitsJavaFile, err := os.OpenFile(path.Join(basePackageDir, "ConfigUnit.java"), os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
 	check(err)
 
