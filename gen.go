@@ -371,8 +371,12 @@ func main() {
 	unitWriter.Flush()
 	unitsJavaFile.Close()
 
-
 	for className, unit := range guide.Units {
+
+		// Within a unit, definitions can be ordered by the renderer to ensure they are populated
+		// on the cluster in specific order. Their order in the source yaml is honored.
+		rendererOrderHint := 1;
+
 		fmt.Println("Generating unit: " + className)
 		for _, oc := range unit.Elements {
 			goPkgDir := oc.PkgDir
@@ -424,6 +428,8 @@ func main() {
 		jw.WriteString("\npublic interface " + className + " extends ConfigUnit {\n\n")
 		for _, oc := range unit.Elements {
 			if oc.PackageOnly == false {
+				jw.WriteString(fmt.Sprintf("\t@RendererOrder(value =\"%04d\")\n", rendererOrderHint))
+				rendererOrderHint = rendererOrderHint + 1
 				jw.WriteString("\t" + oc.GoType + " get" + oc.GoType + "() throws Exception;\n\n")
 			}
 		}
