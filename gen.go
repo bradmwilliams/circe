@@ -266,13 +266,13 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 			jw.WriteString(fmt.Sprintf("\tdefault String _getGeneratorNamespaceHint() { return %q; }\n", sg.config.KubeNamespace))
 
 			jw.WriteString("\t@YamlPropertyIgnore\n")
-			jw.WriteString(fmt.Sprintf("\tdefault String _getGeneratorNameHit() { return %q; }\n", sg.config.KubeName))
+			jw.WriteString(fmt.Sprintf("\tdefault String _getGeneratorNameHint() { return %q; }\n", sg.config.KubeName))
 
 
 			if  sg.config.Multiple {
 				jw.WriteString("\tObjectMeta getMetadata() throws Exception;\n")
 			} else {
-				jw.WriteString("\tdefault ObjectMeta getMetadata() throws Exception { return new ObjectMeta(_getGeneratorNamespaceHint(), _getGeneratorNameHit()); }\n")
+				jw.WriteString("\tdefault ObjectMeta getMetadata() throws Exception { return new ObjectMeta(_getGeneratorNamespaceHint(), _getGeneratorNameHint()); }\n")
 			}
 			continue
 		}
@@ -388,7 +388,7 @@ func main() {
 
 		// Within a unit, definitions can be ordered by the renderer to ensure they are populated
 		// on the cluster in specific order. Their order in the source yaml is honored.
-		rendererOrderHint := 1;
+		renderOrderHint := 1;
 
 		fmt.Println("Generating unit: " + className)
 		for _, oc := range unit.Elements {
@@ -441,15 +441,17 @@ func main() {
 		jw.WriteString("\npublic interface " + className + " extends ConfigUnit {\n\n")
 		for _, oc := range unit.Elements {
 			if oc.PackageOnly == false {
-				jw.WriteString(fmt.Sprintf("\t@RendererOrder(value =\"%04d\")\n", rendererOrderHint))
-				rendererOrderHint = rendererOrderHint + 1
+				jw.WriteString(fmt.Sprintf("\t@RenderOrder(value =\"%04d\")\n", renderOrderHint))
+				renderOrderHint = renderOrderHint + 1
 
+				methodName := "get" + oc.GoType
 				javaType := oc.GoType
 				if oc.Multiple {
-					javaType = "BeanList<" + javaType + ">"
+					javaType = "KubeList<" + javaType + ">"
+					methodName = methodName + "List"
 				}
 
-				jw.WriteString("\t" + javaType + " get" + oc.GoType + "() throws Exception;\n\n")
+				jw.WriteString("\t" + javaType + " " + methodName + "() throws Exception;\n\n")
 			}
 		}
 		jw.WriteString("\n}\n")

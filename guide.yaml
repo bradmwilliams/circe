@@ -48,6 +48,12 @@ units:
       kube_group: config.openshift.io
       kube_name: cluster
 
+    - package: k8s.io/api/core/v1
+      go_type: Secret
+      kube_namespace: openshift-config
+      multiple: true
+
+
 
   BuildConfigDefinition:
     name: build
