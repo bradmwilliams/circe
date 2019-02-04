@@ -11,7 +11,8 @@ units:
     - package: sigs.k8s.io/cluster-api/pkg/apis/cluster/v1alpha1
       go_type: MachineSet
       kube_name: default
-      kube_namespace: openshift-cluster-node-tuning-operator
+      multiple: true
+      kube_namespace: openshift-cluster-api
 
     - package: github.com/openshift/cluster-network-operator/pkg/apis/networkoperator/v1
       go_type: NetworkConfig
@@ -44,5 +45,14 @@ units:
 
     - package: github.com/openshift/api/config/v1
       go_type: OAuth
+      kube_group: config.openshift.io
+      kube_name: cluster
+
+
+  BuildConfigDefinition:
+    name: build
+    elements:
+    - package: github.com/openshift/api/config/v1
+      go_type: Build
       kube_group: config.openshift.io
       kube_name: cluster

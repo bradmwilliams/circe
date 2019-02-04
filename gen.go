@@ -229,7 +229,7 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 	jw.WriteString(fmt.Sprintf("package %s;\n\n", sg.pkg))
 
 	jw.WriteString("import " + sg.beanPkg + ".*;\n")
-	jw.WriteString("import com.github.openshift.circe.yaml.Bean;\n")
+	jw.WriteString("import com.github.openshift.circe.yaml.*;\n")
 	jw.WriteString("import java.util.*;\n\n")
 
 	jw.WriteString(fmt.Sprintf("public interface %s extends Bean {\n", structName))
@@ -260,8 +260,20 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 		}
 
 		if strings.HasSuffix(fieldVar.Type().String(), "ObjectMeta") {
-			fmt.Println("Skipping ObjectMeta")
-			jw.WriteString(fmt.Sprintf("\tdefault ObjectMeta getMetadata() throws Exception { return new ObjectMeta(%q, %q); }\n", sg.config.KubeNamespace, sg.config.KubeName))
+			fmt.Println("Processing ObjectMeta")
+
+			jw.WriteString("\t@YamlPropertyIgnore\n")
+			jw.WriteString(fmt.Sprintf("\tdefault String _getGeneratorNamespaceHint() { return %q; }\n", sg.config.KubeNamespace))
+
+			jw.WriteString("\t@YamlPropertyIgnore\n")
+			jw.WriteString(fmt.Sprintf("\tdefault String _getGeneratorNameHit() { return %q; }\n", sg.config.KubeName))
+
+
+			if  sg.config.Multiple {
+				jw.WriteString("\tObjectMeta getMetadata() throws Exception;\n")
+			} else {
+				jw.WriteString("\tdefault ObjectMeta getMetadata() throws Exception { return new ObjectMeta(_getGeneratorNamespaceHint(), _getGeneratorNameHit()); }\n")
+			}
 			continue
 		}
 
@@ -312,6 +324,7 @@ type OperatorConfig struct {
 	KubeName      string `yaml:"kube_name"`
 	KubeNamespace string `yaml:"kube_namespace"`
 	PackageOnly   bool `yaml:"package_only"`
+	Multiple      bool `yaml:"multiple"`
 }
 
 type Unit struct {
@@ -430,7 +443,13 @@ func main() {
 			if oc.PackageOnly == false {
 				jw.WriteString(fmt.Sprintf("\t@RendererOrder(value =\"%04d\")\n", rendererOrderHint))
 				rendererOrderHint = rendererOrderHint + 1
-				jw.WriteString("\t" + oc.GoType + " get" + oc.GoType + "() throws Exception;\n\n")
+
+				javaType := oc.GoType
+				if oc.Multiple {
+					javaType = "BeanList<" + javaType + ">"
+				}
+
+				jw.WriteString("\t" + javaType + " get" + oc.GoType + "() throws Exception;\n\n")
 			}
 		}
 		jw.WriteString("\n}\n")
