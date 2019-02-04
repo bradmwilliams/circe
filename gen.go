@@ -269,7 +269,7 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 			jw.WriteString(fmt.Sprintf("\tdefault String _getGeneratorNameHint() { return %q; }\n", sg.config.KubeName))
 
 
-			if  sg.config.Multiple {
+			if  sg.config.List {
 				jw.WriteString("\tObjectMeta getMetadata() throws Exception;\n")
 			} else {
 				jw.WriteString("\tdefault ObjectMeta getMetadata() throws Exception { return new ObjectMeta(_getGeneratorNamespaceHint(), _getGeneratorNameHint()); }\n")
@@ -324,7 +324,8 @@ type OperatorConfig struct {
 	KubeName      string `yaml:"kube_name"`
 	KubeNamespace string `yaml:"kube_namespace"`
 	PackageOnly   bool `yaml:"package_only"`
-	Multiple      bool `yaml:"multiple"`
+	List          bool `yaml:"list"`
+	Map          bool `yaml:"map"`
 }
 
 type Unit struct {
@@ -446,9 +447,12 @@ func main() {
 
 				methodName := "get" + oc.GoType
 				javaType := oc.GoType
-				if oc.Multiple {
+				if oc.List {
 					javaType = "KubeList<" + javaType + ">"
 					methodName = methodName + "List"
+				} else if oc.Map {
+					javaType = "MapBean<" + javaType + ">"
+					methodName = methodName + "Map"
 				}
 
 				jw.WriteString("\t" + javaType + " " + methodName + "() throws Exception;\n\n")

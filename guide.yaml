@@ -11,7 +11,7 @@ units:
     - package: sigs.k8s.io/cluster-api/pkg/apis/cluster/v1alpha1
       go_type: MachineSet
       kube_name: default
-      multiple: true
+      list: true
       kube_namespace: openshift-cluster-api
 
     - package: github.com/openshift/cluster-network-operator/pkg/apis/networkoperator/v1
@@ -51,7 +51,7 @@ units:
     - package: k8s.io/api/core/v1
       go_type: Secret
       kube_namespace: openshift-config
-      multiple: true
+      list: true
 
 
 
