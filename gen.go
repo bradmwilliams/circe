@@ -213,24 +213,44 @@ func (sg *StructGen) getJavaType(typ types.Type) string {
 	}
 }
 
-func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Struct) {
+func underscoreVersion(version string) string {
+	return strings.Replace(version, ".", "_", -1)
+}
 
-	_, ok := sg.outputDone[structName]
-	if ok {
-		// if the struct has already been output for this package
-		return
-	} else {
-		sg.outputDone[structName] = true
+func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Struct) string {
+
+	goPkgSplit := strings.Split(strings.TrimRight(sg.goPkgDir, "/"), "/")
+	apiVersion := sg.config.KubeVersion
+	if len(apiVersion) == 0 {
+		apiVersion = goPkgSplit[len(goPkgSplit) - 1]
+		if strings.HasPrefix(apiVersion, "v") == false {
+			panic("Unable to autodetect apiVersion for package (add kube_version in guide.yaml): " + sg.config.PkgDir)
+		}
 	}
 
-	javaFile, err := os.OpenFile(path.Join(sg.javaPkgDir, structName + ".java"), os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
+	version_underscore := underscoreVersion(apiVersion);
+
+	modulePackage := fmt.Sprintf("%s.%s", sg.pkg, version_underscore)
+	modulePkgDir := path.Join(sg.javaPkgDir, version_underscore)
+
+	_, ok := sg.outputDone[modulePackage]
+	if ok {
+		// if the struct has already been output for this package
+		return modulePackage
+	} else {
+		sg.outputDone[modulePackage] = true
+	}
+
+
+	os.MkdirAll(modulePkgDir, 0755)
+	javaFile, err := os.OpenFile(path.Join(modulePkgDir, structName + ".java"), os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
 	check(err)
 
 	defer javaFile.Close()
 
 	jw := bufio.NewWriter(javaFile)
 
-	jw.WriteString(fmt.Sprintf("package %s;\n\n", sg.pkg))
+	jw.WriteString(fmt.Sprintf("package %s;\n", modulePackage))
 
 	jw.WriteString("import " + sg.beanPkg + ".*;\n")
 	jw.WriteString("import com.github.openshift.circe.yaml.*;\n")
@@ -247,14 +267,6 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 		if strings.HasSuffix(fieldVar.Type().String(), "TypeMeta") {
 			fmt.Println("Skipping TypeMeta")
 			jw.WriteString(fmt.Sprintf("\tdefault String getKind() { return %q; }\n", structName))
-			goPkgSplit := strings.Split(strings.TrimRight(sg.goPkgDir, "/"), "/")
-			apiVersion := sg.config.KubeVersion
-			if len(apiVersion) == 0 {
-				apiVersion = goPkgSplit[len(goPkgSplit) - 1]
-				if strings.HasPrefix(apiVersion, "v") == false {
-					panic("Unable to autodetect apiVersion for package (add kube_version in guide.yaml): " + sg.config.PkgDir)
-				}
-			}
 
 			if len(sg.config.KubeGroup) > 0 {
 				apiVersion = sg.config.KubeGroup + "/" + apiVersion
@@ -318,6 +330,8 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 
 	jw.WriteString("}\n")  // close 'public interface ... {'
 	jw.Flush()
+
+	return modulePackage
 }
 
 type OperatorConfig struct {
@@ -327,13 +341,14 @@ type OperatorConfig struct {
 	KubeVersion   string `yaml:"kube_version"`
 	KubeName      string `yaml:"kube_name"`
 	KubeNamespace string `yaml:"kube_namespace"`
-	PackageOnly   bool `yaml:"package_only"`
+	ModuleOnly   bool `yaml:"module_only"`
 	List          bool `yaml:"list"`
 	Map          bool `yaml:"map"`
 }
 
 type Unit struct {
 	Name        string `yaml:"name"`
+	Version     string `yaml:"version"`
 	Elements    []OperatorConfig `yaml:"elements"`
 	JavaImports []string  `yaml:"imports"`
 }
@@ -365,29 +380,14 @@ func main() {
 		paths: strings.Split(gopath, ":"),
 	}
 
-	packageNames := make([]string, 0)
-
-
 	os.MkdirAll(basePackageDir, 0750)
-	unitsJavaFile, err := os.OpenFile(path.Join(basePackageDir, "ConfigUnitType.java"), os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
+	definitionsEnumFile, err := os.OpenFile(path.Join(basePackageDir, "DefinitionType.java"), os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
 	check(err)
 
-	unitWriter := bufio.NewWriter(unitsJavaFile)
-	unitWriter.WriteString("package " + basePkg + ";\n\n")
+	defsEnumWriter := bufio.NewWriter(definitionsEnumFile)
+	defsEnumWriter.WriteString("package " + basePkg + ";\n\n")
 
-	unitWriter.WriteString("\npublic enum ConfigUnitType {\n\n")
-	for className, unit := range guide.Units {
-		unitWriter.WriteString("\t" + unit.Name + "(" + className + ".class),\n")
-	}
-	unitWriter.WriteString("\t;\n\n") // end the enum element list
-
-	unitWriter.WriteString("\tpublic Class<?> mustImplementClass;\n\n" );
-
-	unitWriter.WriteString("\tConfigUnitType(Class<?> mustImplementClass) { this.mustImplementClass = mustImplementClass; }\n" );
-
-	unitWriter.WriteString("\n}\n")
-	unitWriter.Flush()
-	unitsJavaFile.Close()
+	defsEnumWriter.WriteString("\npublic enum DefinitionType {\n\n")
 
 	for className, unit := range guide.Units {
 
@@ -409,8 +409,6 @@ func main() {
 
 			shortPkgName := strings.ToLower(oc.GoType)
 			packageName := fmt.Sprintf("%s.%s", basePkg, shortPkgName)
-			unit.JavaImports = append(unit.JavaImports, packageName)
-			packageNames = append(packageNames, packageName)
 
 			javaPkgDir := path.Join(basePackageDir, shortPkgName)
 			os.MkdirAll(javaPkgDir, 0750)
@@ -431,15 +429,26 @@ func main() {
 				outputDone: make(map[string]bool),
 			}
 
-			sg.outputStruct(structName, underlyingStruct)
+			modulePackage := sg.outputStruct(structName, underlyingStruct)
+			unit.JavaImports = append(unit.JavaImports, modulePackage)
 
 		}
 
-		javaFile, err := os.OpenFile(path.Join(basePackageDir, className + ".java"), os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
+		defUnderscoreVersion := underscoreVersion(unit.Version)
+
+		defPkgDir := path.Join(basePackageDir, "def", defUnderscoreVersion)
+		defPkg := strings.Join([]string{basePkg, "def", defUnderscoreVersion}, ".")
+		defClassName := strings.Join([]string{basePkg, "def", defUnderscoreVersion, className, "class"}, ".")
+		defHumanName := fmt.Sprintf("%s-%s", unit.Version, unit.Name)
+
+		os.MkdirAll(defPkgDir, 0755)
+		javaFile, err := os.OpenFile(path.Join(defPkgDir, className + ".java"), os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
 		check(err)
 
+		defsEnumWriter.WriteString(fmt.Sprintf("\t%s_%s(%s, %q),\n", defUnderscoreVersion, unit.Name, defClassName, defHumanName))
+
 		jw := bufio.NewWriter(javaFile)
-		jw.WriteString("package " + basePkg + ";\n\n")
+		jw.WriteString("package " + defPkg + ";\n\n")
 
 		jw.WriteString("import java.util.*;\n")
 		jw.WriteString("import com.github.openshift.circe.yaml.*;\n")
@@ -450,7 +459,7 @@ func main() {
 
 		jw.WriteString("import " + beanPkg + ".*;\n")
 
-		jw.WriteString("\npublic interface " + className + " extends ConfigUnit {\n\n")
+		jw.WriteString("\npublic interface " + className + " extends Definition {\n\n")
 		for _, oc := range unit.Elements {
 			if oc.PackageOnly == false {
 				jw.WriteString(fmt.Sprintf("\t@RenderOrder(value =\"%04d\")\n", renderOrderHint))
@@ -473,6 +482,18 @@ func main() {
 		jw.Flush()
 		javaFile.Close()
 	}
+
+	defsEnumWriter.WriteString("\t;\n\n") // end the enum element list
+
+	defsEnumWriter.WriteString("\tpublic Class<?> mustImplementClass;\n\n" );
+	defsEnumWriter.WriteString("\tpublic String humanName;\n\n" );
+
+	defsEnumWriter.WriteString("\tDefinitionType(Class<?> mustImplementClass, String humanName) { this.mustImplementClass = mustImplementClass; this.humanName = humanName; }\n" );
+
+	defsEnumWriter.WriteString("\n}\n")
+	defsEnumWriter.Flush()
+	definitionsEnumFile.Close()
+
 
 	return
 }

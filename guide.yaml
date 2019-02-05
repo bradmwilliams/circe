@@ -2,6 +2,7 @@ units:
 
   ClusterDefinition:
     name: cluster
+    version: v4.0
     elements:
     - package: github.com/openshift/cluster-node-tuning-operator/pkg/apis/tuned/v1alpha1/
       go_type: Tuned
@@ -21,6 +22,7 @@ units:
 
   ProjectConfigDefinition:
     name: project
+    version: v4.0
     elements:
     - package: github.com/openshift/api/config/v1
       go_type: Project
@@ -37,6 +39,7 @@ units:
 
   AuthDefinition:
     name: auth
+    version: v4.0
     elements:
     - package: github.com/openshift/api/config/v1
       go_type: Authentication
@@ -57,6 +60,7 @@ units:
 
   BuildConfigDefinition:
     name: build
+    version: v4.0
     elements:
     - package: github.com/openshift/api/config/v1
       go_type: Build
