@@ -156,6 +156,14 @@ type StructGen struct {
 	outputDone map[string]bool
 }
 
+// If there is a direct mapping or helper class for a type in Java land, add it to this
+// map so that no effort will be made trying to map the structure into Java.
+var simpleJavaTypeMap = map[string]string {
+	"RawExtension" : "String",
+	"Quantity" : "Quantity",
+	"Secret" : "Secret",
+}
+
 func (sg *StructGen) getJavaType(typ types.Type) string {
 	typeSplit := strings.Split(typ.String(), ".")
 	typeName := typeSplit[len(typeSplit) - 1]   // networkingconfig_types.NetworkConfig -> NetworkConfig ;  uint32 -> uint32
@@ -163,12 +171,8 @@ func (sg *StructGen) getJavaType(typ types.Type) string {
 
 	fmt.Println("Attempt to coerce type to java: " + typeName)
 
-	if typeName == "RawExtension" {
-		return "String"
-	}
-
-	if typeName == "Quantity" {
-		return "Quantity"
+	if simpleType, ok := simpleJavaTypeMap[typeName]; ok {
+		return simpleType
 	}
 
 	switch ct := typ.(type) {
@@ -269,7 +273,7 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 			jw.WriteString(fmt.Sprintf("\tdefault String _getGeneratorNameHint() { return %q; }\n", sg.config.KubeName))
 
 
-			if  sg.config.List {
+			if  sg.config.List || sg.config.Map {
 				jw.WriteString("\tObjectMeta getMetadata() throws Exception;\n")
 			} else {
 				jw.WriteString("\tdefault ObjectMeta getMetadata() throws Exception { return new ObjectMeta(_getGeneratorNamespaceHint(), _getGeneratorNameHint()); }\n")
@@ -393,6 +397,12 @@ func main() {
 
 		fmt.Println("Generating unit: " + className)
 		for _, oc := range unit.Elements {
+
+			// If the go type has a Java type already associated, don't bother generating java
+			if _, ok := simpleJavaTypeMap[oc.GoType]; ok {
+				continue;
+			}
+
 			goPkgDir := oc.PkgDir
 			pkg, err := d.Import(goPkgDir)
 			check(err)
@@ -432,6 +442,7 @@ func main() {
 		jw.WriteString("package " + basePkg + ";\n\n")
 
 		jw.WriteString("import java.util.*;\n")
+		jw.WriteString("import com.github.openshift.circe.yaml.*;\n")
 
 		for _, packageName := range unit.JavaImports {
 			jw.WriteString("import " + packageName + ".*;\n")
@@ -451,7 +462,7 @@ func main() {
 					javaType = "KubeList<" + javaType + ">"
 					methodName = methodName + "List"
 				} else if oc.Map {
-					javaType = "MapBean<" + javaType + ">"
+					javaType = "Map<String," + javaType + ">"
 					methodName = methodName + "Map"
 				}
 
