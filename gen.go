@@ -326,12 +326,12 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 			}
 
 			javaType := sg.getJavaType(fieldVar.Type())
-			jw.WriteString(fmt.Sprintf("\t//json:%s\n", jsonName))
+			jw.WriteString(fmt.Sprintf("\t@YamlPropertyName(value=%q)\n", jsonName))
 
 			if fieldVar.Anonymous() || strings.Contains(jsonTag, ",inline") {
 				jw.WriteString("\t@YamlPropertyInline\n")
 			}
-			jw.WriteString(fmt.Sprintf("\t%s get%s() throws Exception;\n", javaType, fieldVar.Name()))  // close 'public interface ... {'
+			jw.WriteString(fmt.Sprintf("\t%s get%s() throws Exception;\n\n", javaType, fieldVar.Name()))  // close 'public interface ... {'
 		} else {
 			panic(fmt.Sprintf("Unable to find json name for: %s", fieldVar.String()))
 		}
