@@ -1,5 +1,6 @@
 units:
 
+
   ClusterDefinition:
     name: cluster
     version: v4.0
@@ -36,6 +37,14 @@ units:
       kube_name: project-request-template
       kube_namespace: openshift-config
 
+  BuildConfigDefinition:
+    name: build
+    version: v4.0
+    elements:
+    - package: github.com/openshift/api/config/v1
+      go_type: Build
+      kube_group: config.openshift.io
+      kube_name: cluster
 
   AuthDefinition:
     name: auth
@@ -56,13 +65,3 @@ units:
       kube_namespace: openshift-config
       list: true
 
-
-
-  BuildConfigDefinition:
-    name: build
-    version: v4.0
-    elements:
-    - package: github.com/openshift/api/config/v1
-      go_type: Build
-      kube_group: config.openshift.io
-      kube_name: cluster

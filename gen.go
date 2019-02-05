@@ -172,6 +172,7 @@ func (sg *StructGen) getJavaType(typ types.Type) string {
 	fmt.Println("Attempt to coerce type to java: " + typeName)
 
 	if simpleType, ok := simpleJavaTypeMap[typeName]; ok {
+		fmt.Println("  Coerced to simple type: " + simpleType);
 		return simpleType
 	}
 
@@ -203,9 +204,11 @@ func (sg *StructGen) getJavaType(typ types.Type) string {
 		// e.g. 'type SomeNamedType struct'    OR    'type SomeNamedType string|uint32...' <==basic
 		switch ut := ct.Underlying().(type) {
 		case *types.Struct:
+			fmt.Println("  Coercing to complex struct...");
 			sg.outputStruct(typeName, ut)
 			return typeName
 		default:
+			fmt.Println("  Coercing to java type");
 			return sg.getJavaType(ut)
 		}
 	default:
@@ -233,17 +236,21 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 	modulePackage := fmt.Sprintf("%s.%s", sg.pkg, version_underscore)
 	modulePkgDir := path.Join(sg.javaPkgDir, version_underscore)
 
-	_, ok := sg.outputDone[modulePackage]
+	structId := modulePackage + "." + structName
+
+	_, ok := sg.outputDone[structId]
 	if ok {
 		// if the struct has already been output for this package
 		return modulePackage
 	} else {
-		sg.outputDone[modulePackage] = true
+		sg.outputDone[structId] = true
 	}
 
 
 	os.MkdirAll(modulePkgDir, 0755)
-	javaFile, err := os.OpenFile(path.Join(modulePkgDir, structName + ".java"), os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
+	javaFilename := path.Join(modulePkgDir, structName + ".java")
+	fmt.Println("   Opening file: " + javaFilename)
+	javaFile, err := os.OpenFile(javaFilename, os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
 	check(err)
 
 	defer javaFile.Close()
@@ -260,6 +267,7 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 
 	for fi := 0; fi < underlyingStruct.NumFields(); fi++ {
 		fieldVar := underlyingStruct.Field(fi)
+
 		fmt.Println(fmt.Sprintf("Processing field: %s", fieldVar))
 
 		fmt.Printf("Testing: %s\n", fieldVar.Type().String())
@@ -319,6 +327,10 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 
 			javaType := sg.getJavaType(fieldVar.Type())
 			jw.WriteString(fmt.Sprintf("\t//json:%s\n", jsonName))
+
+			if fieldVar.Anonymous() || strings.Contains(jsonTag, ",inline") {
+				jw.WriteString("\t@YamlPropertyInline\n")
+			}
 			jw.WriteString(fmt.Sprintf("\t%s get%s() throws Exception;\n", javaType, fieldVar.Name()))  // close 'public interface ... {'
 		} else {
 			panic(fmt.Sprintf("Unable to find json name for: %s", fieldVar.String()))
@@ -461,7 +473,7 @@ func main() {
 
 		jw.WriteString("\npublic interface " + className + " extends Definition {\n\n")
 		for _, oc := range unit.Elements {
-			if oc.PackageOnly == false {
+			if oc.ModuleOnly == false {
 				jw.WriteString(fmt.Sprintf("\t@RenderOrder(value =\"%04d\")\n", renderOrderHint))
 				renderOrderHint = renderOrderHint + 1
 
