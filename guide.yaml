@@ -65,3 +65,20 @@ units:
       kube_namespace: openshift-config
       list: true
 
+  MachineConfigDefinition:
+    # Require github.com/coreos/ignition [spec2x branch]
+
+    name: machineconfig
+    version: v4.0
+    elements:
+    - package: github.com/openshift/machine-config-operator/pkg/apis/machineconfiguration.openshift.io/v1
+      go_type: MachineConfigPool
+      kube_group: machineconfiguration.openshift.io
+      list: true
+      kube_namespace: openshift-machine-config-operator
+
+    - package: github.com/openshift/machine-config-operator/pkg/apis/machineconfiguration.openshift.io/v1
+      go_type: MachineConfig
+      kube_group: machineconfiguration.openshift.io
+      list: true
+      kube_namespace: openshift-machine-config-operator
