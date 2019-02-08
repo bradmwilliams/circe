@@ -28,8 +28,9 @@ func check(e error) {
 }
 
 type dynimporter struct {
-	// paths which will be scanned for src/<go package> during Import
+	// paths which will be scanned for /<go package> during Import
 	paths []string
+	vendorDir string
 }
 
 var imported map[string]*types.Package = make(map[string]*types.Package)
@@ -49,7 +50,7 @@ func (importer dynimporter) Import(goPkgName string) (*types.Package, error) {
 	fsetBase := token.NewFileSet()
 
 	for _, srcDir := range importer.paths {
-		checkDir := path.Join(srcDir, "src", goPkgName)
+		checkDir := path.Join(srcDir, goPkgName)
 		_, err := os.Stat(checkDir)
 
 		if ( err != nil ) {
@@ -60,9 +61,22 @@ func (importer dynimporter) Import(goPkgName string) (*types.Package, error) {
 			}
 		}
 
+		nextImporter := importer
+
+		// Once a src directory is found in a particular src directory, prepend the vendor source
+		// directory if one has been specified.
+		if len(importer.vendorDir) > 0 {
+			vendorPath := path.Join(srcDir, importer.vendorDir)
+			paths := append([]string{vendorPath}, importer.paths...)
+			nextImporter = dynimporter{
+				paths: paths,
+				vendorDir: "",
+			}
+		}
+
 		asts, err := parser.ParseDir(fsetBase, checkDir, nil, parser.ParseComments)
 
-		conf := types.Config{IgnoreFuncBodies: true, Importer:importer, DisableUnusedImportCheck: true}
+		conf := types.Config{IgnoreFuncBodies: true, Importer:nextImporter, DisableUnusedImportCheck: true}
 		conf.Error = func(err error) {
 			log.Println("Error during check 2: ", err)
 		}
@@ -348,6 +362,7 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 
 type OperatorConfig struct {
 	PkgDir        string `yaml:"package"`
+	VendorDir     string `yaml:"vendor"`
 	GoType        string `yaml:"go_type"`
 	KubeGroup     string `yaml:"kube_group"`
 	KubeVersion   string `yaml:"kube_version"`
@@ -388,8 +403,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	d := dynimporter{
-		paths: strings.Split(gopath, ":"),
+	// Each entry in the gopath should have a 'src' directory within it. Populate a list of directories the
+	// importer should search.
+	importerPaths := make([]string, 0)
+	for _, entry := range strings.Split(gopath, ":") {
+		importerPaths = append(importerPaths, path.Join(entry, "src"))
 	}
 
 	os.MkdirAll(basePackageDir, 0750)
@@ -415,8 +433,15 @@ func main() {
 				continue;
 			}
 
+			// Create an importer that will search go elements for the main package
+			// Also specify vendor directory which element may have specified.
+			importer := dynimporter{
+				paths: importerPaths,
+				vendorDir: oc.VendorDir,
+			}
+
 			goPkgDir := oc.PkgDir
-			pkg, err := d.Import(goPkgDir)
+			pkg, err := importer.Import(goPkgDir)
 			check(err)
 
 			shortPkgName := strings.ToLower(oc.GoType)

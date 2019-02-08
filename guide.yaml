@@ -6,17 +6,20 @@ units:
     version: v4.0
     elements:
     - package: github.com/openshift/cluster-node-tuning-operator/pkg/apis/tuned/v1alpha1/
+      vendor: github.com/openshift/cluster-node-tuning-operator/vendor
       go_type: Tuned
       kube_name: default
       namespace: openshift-cluster-node-tuning-operator
 
     - package: sigs.k8s.io/cluster-api/pkg/apis/cluster/v1alpha1
+      vendor: sigs.k8s.io/cluster-api/vendor
       go_type: MachineSet
       kube_name: default
       list: true
       kube_namespace: openshift-cluster-api
 
     - package: github.com/openshift/cluster-network-operator/pkg/apis/networkoperator/v1
+      vendor: github.com/openshift/cluster-network-operator/vendor
       go_type: NetworkConfig
       kube_name: default
 
@@ -24,13 +27,16 @@ units:
   ProjectConfigDefinition:
     name: project
     version: v4.0
+
     elements:
     - package: github.com/openshift/api/config/v1
+      vendor: github.com/openshift/api/vendor
       go_type: Project
       kube_group: config.openshift.io
       kube_name: cluster
 
     - package: github.com/openshift/origin/pkg/template/apis/template
+      vendor: github.com/openshift/origin/vendor
       go_type: Template
       kube_group: template.openshift.io
       kube_version: v1
@@ -42,6 +48,7 @@ units:
     version: v4.0
     elements:
     - package: github.com/openshift/api/config/v1
+      vendor: github.com/openshift/vendor
       go_type: Build
       kube_group: config.openshift.io
       kube_name: cluster
@@ -49,18 +56,22 @@ units:
   AuthDefinition:
     name: auth
     version: v4.0
+
     elements:
     - package: github.com/openshift/api/config/v1
+      vendor: github.com/openshift/api/vendor
       go_type: Authentication
       kube_group: config.openshift.io
       kube_name: cluster
 
     - package: github.com/openshift/api/config/v1
+      vendor: github.com/openshift/api/vendor
       go_type: OAuth
       kube_group: config.openshift.io
       kube_name: cluster
 
     - package: k8s.io/api/core/v1
+      vendor: k8s.io/api/vendor
       go_type: Secret
       kube_namespace: openshift-config
       list: true
@@ -72,12 +83,14 @@ units:
     version: v4.0
     elements:
     - package: github.com/openshift/machine-config-operator/pkg/apis/machineconfiguration.openshift.io/v1
+      vendor: github.com/openshift/machine-config-operator/vendor
       go_type: MachineConfigPool
       kube_group: machineconfiguration.openshift.io
       list: true
       kube_namespace: openshift-machine-config-operator
 
     - package: github.com/openshift/machine-config-operator/pkg/apis/machineconfiguration.openshift.io/v1
+      vendor: github.com/openshift/machine-config-operator/vendor
       go_type: MachineConfig
       kube_group: machineconfiguration.openshift.io
       list: true
