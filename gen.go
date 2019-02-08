@@ -374,6 +374,7 @@ type OperatorConfig struct {
 }
 
 type Unit struct {
+	Class       string `yaml:"class"`
 	Name        string `yaml:"name"`
 	Version     string `yaml:"version"`
 	Elements    []OperatorConfig `yaml:"elements"`
@@ -381,7 +382,7 @@ type Unit struct {
 }
 
 type GuideYaml struct {
-	Units map[string]Unit `yaml:"units"`
+	Units []Unit `yaml:"units"`
 }
 
 func main() {
@@ -419,7 +420,8 @@ func main() {
 
 	defsEnumWriter.WriteString("\npublic enum DefinitionType {\n\n")
 
-	for className, unit := range guide.Units {
+	for _, unit := range guide.Units {
+		className := unit.Class
 
 		// Within a unit, definitions can be ordered by the renderer to ensure they are populated
 		// on the cluster in specific order. Their order in the source yaml is honored.
