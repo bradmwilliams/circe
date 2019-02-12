@@ -102,11 +102,18 @@ units:
     list: true
     kube_namespace: openshift-machine-config-operator
 
-- class: ApiServerConfigDefinition
-  name: apis
+- class: ControlPlaneConfigDefinition
+  name: controlplane
   version: v4.0
 
   elements:
+
+  - package: github.com/openshift/api/kubecontrolplane/v1
+    vendor: github.com/openshift/api/vendor
+    go_type: KubeAPIServerConfig
+    kube_group: kubecontrolplane.config.openshift.io
+    kube_name: cluster
+
   - package: github.com/openshift/api/operator/v1
     vendor: github.com/openshift/api/vendor
     go_type: KubeAPIServer
