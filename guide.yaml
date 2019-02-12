@@ -99,3 +99,18 @@ units:
     kube_group: machineconfiguration.openshift.io
     list: true
     kube_namespace: openshift-machine-config-operator
+
+- class: ApiServerConfigDefinition
+  name: apis
+  version: v4.0
+
+  elements:
+  - package: github.com/openshift/api/operator/v1
+    vendor: github.com/openshift/api/vendor
+    go_type: KubeAPIServer
+    kube_group: operator.openshift.io
+
+  - package: github.com/openshift/api/operator/v1
+    vendor: github.com/openshift/api/vendor
+    go_type: OpenShiftAPIServer
+    kube_group: operator.openshift.io
