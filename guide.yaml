@@ -132,6 +132,12 @@ units:
     kube_group: openshiftcontrolplane.config.openshift.io
     kube_name: cluster
 
+  - package: github.com/openshift/api/openshiftcontrolplane/v1
+    vendor: github.com/openshift/api/vendor
+    go_type: OpenShiftControllerManagerConfig
+    kube_group: openshiftcontrolplane.config.openshift.io
+    kube_name: cluster
+
 - class: BuildConfigDefinition
   name: builds
   version: v4.0
