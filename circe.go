@@ -277,7 +277,14 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 	jw.WriteString("import com.github.openshift.circe.yaml.*;\n")
 	jw.WriteString("import java.util.*;\n\n")
 
-	jw.WriteString(fmt.Sprintf("public interface %s extends Bean {\n", structName))
+	jw.WriteString(fmt.Sprintf("public interface %s extends Bean {\n\n", structName))
+
+	ezDefaults := make([]string, 0)
+
+	writeGetterMethodSig := func(methodType string, fieldName string) {
+		ezDefaults = append(ezDefaults, fmt.Sprintf("\t\tdefault %s get%s() throws Exception { return null; }\n\n", methodType, fieldName))
+		jw.WriteString(fmt.Sprintf("\t%s get%s() throws Exception;\n\n", methodType, fieldName))
+	}
 
 	for fi := 0; fi < underlyingStruct.NumFields(); fi++ {
 		fieldVar := underlyingStruct.Field(fi)
@@ -317,9 +324,9 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 
 		if strings.HasSuffix(fieldVar.Type().String(), "runtime.Object") {
 			if strings.HasPrefix(fieldVar.Type().String(), "[]") {
-				jw.WriteString(fmt.Sprintf("\t%s get%s() throws Exception;\n", "List<Bean>", fieldVar.Name()))
+				writeGetterMethodSig("List<Bean>", fieldVar.Name())
 			} else {
-				jw.WriteString(fmt.Sprintf("\t%s get%s() throws Exception;\n", "Bean", fieldVar.Name()))
+				writeGetterMethodSig("Bean", fieldVar.Name())
 			}
 			continue
 		}
@@ -345,7 +352,7 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 			if fieldVar.Anonymous() || strings.Contains(jsonTag, ",inline") {
 				jw.WriteString("\t@YamlPropertyInline\n")
 			}
-			jw.WriteString(fmt.Sprintf("\t%s get%s() throws Exception;\n\n", javaType, fieldVar.Name()))  // close 'public interface ... {'
+			writeGetterMethodSig(javaType, fieldVar.Name())
 		} else {
 			panic(fmt.Sprintf("Unable to find json name for: %s", fieldVar.String()))
 		}
@@ -353,6 +360,12 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 		fmt.Println(fieldVar)
 		fmt.Println()
 	}
+
+	jw.WriteString(fmt.Sprintf("\tinterface EZ extends %s {\n\n", structName))
+	for _, ezDefault := range ezDefaults {
+		jw.WriteString(ezDefault);
+	}
+	jw.WriteString("\t}\n\n") // close EZ interface
 
 	jw.WriteString("}\n")  // close 'public interface ... {'
 	jw.Flush()
@@ -498,6 +511,14 @@ func main() {
 
 		jw.WriteString("import " + beanPkg + ".*;\n")
 
+		ezDefaults := make([]string, 0)
+
+		writeMethodSig := func(methodType string, methodName string) {
+			ezDefaults = append(ezDefaults, fmt.Sprintf("\t\tdefault %s %s() throws Exception { return null; }\n\n", methodType, methodName))
+			jw.WriteString(fmt.Sprintf("\t%s %s() throws Exception;\n\n", methodType, methodName))
+		}
+
+
 		jw.WriteString("\npublic interface " + className + " extends Definition {\n\n")
 		for _, oc := range unit.Elements {
 			if oc.ModuleOnly == false {
@@ -513,10 +534,17 @@ func main() {
 					javaType = "Map<String," + javaType + ">"
 					methodName = methodName + "Map"
 				}
-
-				jw.WriteString("\t" + javaType + " " + methodName + "() throws Exception;\n\n")
+				writeMethodSig(javaType, methodName);
 			}
 		}
+
+		jw.WriteString(fmt.Sprintf("\tinterface EZ extends %s {\n\n", className))
+		for _, ezDefault := range ezDefaults {
+			jw.WriteString(ezDefault);
+		}
+		jw.WriteString("\t}\n\n") // close EZ interface
+
+
 		jw.WriteString("\n}\n")
 		jw.Flush()
 		javaFile.Close()
