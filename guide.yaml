@@ -108,12 +108,6 @@ units:
 
   elements:
 
-  - package: github.com/openshift/api/kubecontrolplane/v1
-    vendor: github.com/openshift/api/vendor
-    go_type: KubeAPIServerConfig
-    kube_group: kubecontrolplane.config.openshift.io
-    kube_name: cluster
-
   - package: github.com/openshift/api/operator/v1
     vendor: github.com/openshift/api/vendor
     go_type: KubeAPIServer
@@ -124,18 +118,6 @@ units:
     vendor: github.com/openshift/api/vendor
     go_type: OpenShiftAPIServer
     kube_group: operator.openshift.io
-    kube_name: cluster
-
-  - package: github.com/openshift/api/openshiftcontrolplane/v1
-    vendor: github.com/openshift/api/vendor
-    go_type: OpenShiftAPIServerConfig
-    kube_group: openshiftcontrolplane.config.openshift.io
-    kube_name: cluster
-
-  - package: github.com/openshift/api/openshiftcontrolplane/v1
-    vendor: github.com/openshift/api/vendor
-    go_type: OpenShiftControllerManagerConfig
-    kube_group: openshiftcontrolplane.config.openshift.io
     kube_name: cluster
 
 - class: BuildConfigDefinition
