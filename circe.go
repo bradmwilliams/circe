@@ -281,9 +281,15 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 
 	ezDefaults := make([]string, 0)
 
-	writeGetterMethodSig := func(methodType string, fieldName string) {
-		ezDefaults = append(ezDefaults, fmt.Sprintf("\t\tdefault %s get%s() throws Exception { return null; }\n\n", methodType, fieldName))
+	writeGetterMethodSig := func(methodType string, fieldName string, inline bool, jsonName string) {
+		jw.WriteString(fmt.Sprintf("\t@YamlPropertyName(value=%q)\n", jsonName))
+		ezDefaults = append(ezDefaults, fmt.Sprintf("\t\t@YamlPropertyName(value=%q)\n", jsonName))
+		if inline {
+			jw.WriteString("\t@YamlPropertyInline\n")
+			ezDefaults = append(ezDefaults, "\t\t@YamlPropertyInline\n")
+		}
 		jw.WriteString(fmt.Sprintf("\t%s get%s() throws Exception;\n\n", methodType, fieldName))
+		ezDefaults = append(ezDefaults, fmt.Sprintf("\t\tdefault %s get%s() throws Exception { return null; }\n\n", methodType, fieldName))
 	}
 
 	for fi := 0; fi < underlyingStruct.NumFields(); fi++ {
@@ -322,15 +328,6 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 			continue
 		}
 
-		if strings.HasSuffix(fieldVar.Type().String(), "runtime.Object") {
-			if strings.HasPrefix(fieldVar.Type().String(), "[]") {
-				writeGetterMethodSig("List<Bean>", fieldVar.Name())
-			} else {
-				writeGetterMethodSig("Bean", fieldVar.Name())
-			}
-			continue
-		}
-
 		var tag reflect.StructTag = reflect.StructTag(underlyingStruct.Tag(fi))
 		jsonTag := tag.Get("json")
 		jsonName := strings.Split(jsonTag, ",")[0]
@@ -340,6 +337,16 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 		}
 
 		if len(jsonName) > 0 {
+
+			if strings.HasSuffix(fieldVar.Type().String(), "runtime.Object") {
+				if strings.HasPrefix(fieldVar.Type().String(), "[]") {
+					writeGetterMethodSig("List<Bean>", fieldVar.Name(), false, jsonName)
+				} else {
+					writeGetterMethodSig("Bean", fieldVar.Name(), false, jsonName)
+				}
+				continue
+			}
+
 			fmt.Println("Found jsonName: ", jsonName)
 			if jsonName == "status" {
 				fmt.Println("Skipping status field")
@@ -347,12 +354,8 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 			}
 
 			javaType := sg.getJavaType(fieldVar.Type())
-			jw.WriteString(fmt.Sprintf("\t@YamlPropertyName(value=%q)\n", jsonName))
-
-			if fieldVar.Anonymous() || strings.Contains(jsonTag, ",inline") {
-				jw.WriteString("\t@YamlPropertyInline\n")
-			}
-			writeGetterMethodSig(javaType, fieldVar.Name())
+			inline := fieldVar.Anonymous() || strings.Contains(jsonTag, ",inline")
+			writeGetterMethodSig(javaType, fieldVar.Name(), inline, jsonName)
 		} else {
 			panic(fmt.Sprintf("Unable to find json name for: %s", fieldVar.String()))
 		}
