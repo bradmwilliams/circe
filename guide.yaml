@@ -120,6 +120,11 @@ units:
     kube_group: operator.openshift.io
     kube_name: cluster
 
+  - package: k8s.io/api/admissionregistration/v1beta1
+    go_type: ValidatingWebhookConfiguration
+    kube_group: admissionregistration.k8s.io
+    list: true
+
 - class: BuildConfigDefinition
   name: builds
   version: v4.0
