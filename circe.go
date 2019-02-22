@@ -260,9 +260,13 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 		sg.outputDone[structId] = true
 	}
 
+	className := structName
+	if len(sg.config.Class) > 0 {
+		className = sg.config.Class
+	}
 
 	os.MkdirAll(modulePkgDir, 0755)
-	javaFilename := path.Join(modulePkgDir, structName + ".java")
+	javaFilename := path.Join(modulePkgDir, className + ".java")
 	fmt.Println("   Opening file: " + javaFilename)
 	javaFile, err := os.OpenFile(javaFilename, os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
 	check(err)
@@ -277,7 +281,7 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 	jw.WriteString("import com.github.openshift.circe.yaml.*;\n")
 	jw.WriteString("import java.util.*;\n\n")
 
-	jw.WriteString(fmt.Sprintf("public interface %s extends Bean {\n\n", structName))
+	jw.WriteString(fmt.Sprintf("public interface %s extends Bean {\n\n", className))
 
 	ezDefaults := make([]string, 0)
 
@@ -364,7 +368,7 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 		fmt.Println()
 	}
 
-	jw.WriteString(fmt.Sprintf("\tinterface EZ extends %s {\n\n", structName))
+	jw.WriteString(fmt.Sprintf("\tinterface EZ extends %s {\n\n", className))
 	for _, ezDefault := range ezDefaults {
 		jw.WriteString(ezDefault);
 	}
@@ -377,6 +381,7 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 }
 
 type OperatorConfig struct {
+	Class         string `yaml:"class"`
 	PkgDir        string `yaml:"package"`
 	VendorDir     string `yaml:"vendor"`
 	GoType        string `yaml:"go_type"`
@@ -528,13 +533,18 @@ func main() {
 				jw.WriteString(fmt.Sprintf("\t@RenderOrder(value =\"%04d\")\n", renderOrderHint))
 				renderOrderHint = renderOrderHint + 1
 
-				methodName := "get" + oc.GoType
-				javaType := oc.GoType
+				className := oc.GoType
+				if len(oc.Class) > 0 {
+					className = oc.Class
+				}
+
+				methodName := "get" + className
+				javaType := className
 				if oc.List {
-					javaType = "KubeList<" + javaType + ">"
+					javaType = "KubeList<" + className + ">"
 					methodName = methodName + "List"
 				} else if oc.Map {
-					javaType = "Map<String," + javaType + ">"
+					javaType = "Map<String," + className + ">"
 					methodName = methodName + "Map"
 				}
 				writeMethodSig(javaType, methodName);

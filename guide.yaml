@@ -111,12 +111,14 @@ units:
   - package: github.com/openshift/api/operator/v1
     vendor: github.com/openshift/api/vendor
     go_type: KubeAPIServer
+    class: KubeAPIServerOperator
     kube_group: operator.openshift.io
     kube_name: cluster
 
   - package: github.com/openshift/api/operator/v1
     vendor: github.com/openshift/api/vendor
     go_type: OpenShiftAPIServer
+    class: OpenShiftAPIServerOperator
     kube_group: operator.openshift.io
     kube_name: cluster
 
@@ -154,6 +156,13 @@ units:
     vendor: github.com/openshift/api/vendor
     go_type: Console
     kube_group: config.openshift.io
+    kube_name: cluster
+
+  - package: github.com/openshift/api/operator/v1
+    vendor: github.com/openshift/api/vendor
+    class: ConsoleOperator
+    go_type: Console
+    kube_group: operator.openshift.io
     kube_name: cluster
 
 
