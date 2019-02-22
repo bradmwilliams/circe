@@ -142,3 +142,18 @@ units:
     go_type: BuildOverridesConfig
     kube_group: openshiftcontrolplane.config.openshift.io
     kube_name: cluster
+
+
+- class: AdminConsoleDefinition
+  name: adminconsole
+  version: v4.0
+
+  elements:
+
+  - package: github.com/openshift/api/config/v1
+    vendor: github.com/openshift/api/vendor
+    go_type: Console
+    kube_group: config.openshift.io
+    kube_name: cluster
+
+
