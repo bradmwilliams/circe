@@ -146,8 +146,8 @@ units:
     kube_name: cluster
 
 
-- class: AdminConsoleDefinition
-  name: adminconsole
+- class: ConsoleDefinition
+  name: console
   version: v4.0
 
   elements:
