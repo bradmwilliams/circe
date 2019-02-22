@@ -219,7 +219,7 @@ func (sg *StructGen) getJavaType(typ types.Type) string {
 		switch ut := ct.Underlying().(type) {
 		case *types.Struct:
 			fmt.Println("  Coercing to complex struct...");
-			sg.outputStruct(typeName, ut)
+			sg.outputStruct(typeName, ut, "")
 			return typeName
 		default:
 			fmt.Println("  Coercing to java type");
@@ -234,7 +234,7 @@ func underscoreVersion(version string) string {
 	return strings.Replace(version, ".", "_", -1)
 }
 
-func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Struct) string {
+func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Struct, classNameOverride string) string {
 
 	goPkgSplit := strings.Split(strings.TrimRight(sg.goPkgDir, "/"), "/")
 	apiVersion := sg.config.KubeVersion
@@ -260,13 +260,12 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 		sg.outputDone[structId] = true
 	}
 
-	className := structName
-	if len(sg.config.Class) > 0 {
-		className = sg.config.Class
+	if len(classNameOverride) == 0 {
+		classNameOverride = structName
 	}
 
 	os.MkdirAll(modulePkgDir, 0755)
-	javaFilename := path.Join(modulePkgDir, className + ".java")
+	javaFilename := path.Join(modulePkgDir, classNameOverride + ".java")
 	fmt.Println("   Opening file: " + javaFilename)
 	javaFile, err := os.OpenFile(javaFilename, os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
 	check(err)
@@ -281,7 +280,7 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 	jw.WriteString("import com.github.openshift.circe.yaml.*;\n")
 	jw.WriteString("import java.util.*;\n\n")
 
-	jw.WriteString(fmt.Sprintf("public interface %s extends Bean {\n\n", className))
+	jw.WriteString(fmt.Sprintf("public interface %s extends Bean {\n\n", classNameOverride))
 
 	ezDefaults := make([]string, 0)
 
@@ -368,7 +367,7 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 		fmt.Println()
 	}
 
-	jw.WriteString(fmt.Sprintf("\tinterface EZ extends %s {\n\n", className))
+	jw.WriteString(fmt.Sprintf("\tinterface EZ extends %s {\n\n", classNameOverride))
 	for _, ezDefault := range ezDefaults {
 		jw.WriteString(ezDefault);
 	}
@@ -381,9 +380,16 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 }
 
 type OperatorConfig struct {
+	// Override the name of the Java class name
 	Class         string `yaml:"class"`
+
+	// The go package
 	PkgDir        string `yaml:"package"`
+
+	// Vendor directory with which to satisfy dependencies
 	VendorDir     string `yaml:"vendor"`
+
+	// The name of the go type to model
 	GoType        string `yaml:"go_type"`
 	KubeGroup     string `yaml:"kube_group"`
 	KubeVersion   string `yaml:"kube_version"`
@@ -467,7 +473,12 @@ func main() {
 			pkg, err := importer.Import(goPkgDir)
 			check(err)
 
-			shortPkgName := strings.ToLower(oc.GoType)
+			className := oc.GoType
+			if len(oc.Class) > 0 {
+				className = oc.Class
+			}
+
+			shortPkgName := strings.ToLower(className)
 			packageName := fmt.Sprintf("%s.%s", basePkg, shortPkgName)
 
 			javaPkgDir := path.Join(basePackageDir, shortPkgName)
@@ -489,7 +500,7 @@ func main() {
 				outputDone: make(map[string]bool),
 			}
 
-			modulePackage := sg.outputStruct(structName, underlyingStruct)
+			modulePackage := sg.outputStruct(structName, underlyingStruct, oc.Class)
 			unit.JavaImports = append(unit.JavaImports, modulePackage)
 
 		}
@@ -522,17 +533,17 @@ func main() {
 		ezDefaults := make([]string, 0)
 
 		writeMethodSig := func(methodType string, methodName string) {
+			ezDefaults = append(ezDefaults, fmt.Sprintf("\t\t@RenderOrder(value =\"%04d\")\n", renderOrderHint))
 			ezDefaults = append(ezDefaults, fmt.Sprintf("\t\tdefault %s %s() throws Exception { return null; }\n\n", methodType, methodName))
+			jw.WriteString(fmt.Sprintf("\t@RenderOrder(value =\"%04d\")\n", renderOrderHint))
 			jw.WriteString(fmt.Sprintf("\t%s %s() throws Exception;\n\n", methodType, methodName))
+			renderOrderHint = renderOrderHint + 1
 		}
 
 
 		jw.WriteString("\npublic interface " + className + " extends Definition {\n\n")
 		for _, oc := range unit.Elements {
 			if oc.ModuleOnly == false {
-				jw.WriteString(fmt.Sprintf("\t@RenderOrder(value =\"%04d\")\n", renderOrderHint))
-				renderOrderHint = renderOrderHint + 1
-
 				className := oc.GoType
 				if len(oc.Class) > 0 {
 					className = oc.Class
