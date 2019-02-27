@@ -516,7 +516,7 @@ func main() {
 		javaFile, err := os.OpenFile(path.Join(defPkgDir, className + ".java"), os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
 		check(err)
 
-		defsEnumWriter.WriteString(fmt.Sprintf("\t%s_%s(%s, %q),\n", defUnderscoreVersion, unit.Name, defClassName, defHumanName))
+		defsEnumWriter.WriteString(fmt.Sprintf("\t%s_%s(%s, %q, %q),\n", defUnderscoreVersion, unit.Name, defClassName, unit.Name, defHumanName))
 
 		jw := bufio.NewWriter(javaFile)
 		jw.WriteString("package " + defPkg + ";\n\n")
@@ -577,9 +577,10 @@ func main() {
 	defsEnumWriter.WriteString("\t;\n\n") // end the enum element list
 
 	defsEnumWriter.WriteString("\tpublic Class<?> mustImplementClass;\n\n" );
+	defsEnumWriter.WriteString("\tpublic String unitName;\n\n" );
 	defsEnumWriter.WriteString("\tpublic String humanName;\n\n" );
 
-	defsEnumWriter.WriteString("\tDefinitionType(Class<?> mustImplementClass, String humanName) { this.mustImplementClass = mustImplementClass; this.humanName = humanName; }\n" );
+	defsEnumWriter.WriteString("\tDefinitionType(Class<?> mustImplementClass, String unitName, String humanName) { this.mustImplementClass = mustImplementClass; this.unitName = unitName; this.humanName = humanName; }\n" );
 
 	defsEnumWriter.WriteString("\n}\n")
 	defsEnumWriter.Flush()

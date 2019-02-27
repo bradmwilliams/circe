@@ -1,24 +1,10 @@
 units:
 
-
-- class: ClusterDefinition
-  name: cluster
+- class: NetworkDefinition
+  name: network
   version: v4.0
 
   elements:
-  - package: github.com/openshift/cluster-node-tuning-operator/pkg/apis/tuned/v1alpha1/
-    vendor: github.com/openshift/cluster-node-tuning-operator/vendor
-    go_type: Tuned
-    kube_name: default
-    namespace: openshift-cluster-node-tuning-operator
-
-  - package: sigs.k8s.io/cluster-api/pkg/apis/cluster/v1alpha1
-    vendor: sigs.k8s.io/cluster-api/vendor
-    go_type: MachineSet
-    kube_name: default
-    list: true
-    kube_namespace: openshift-cluster-api
-
   - package: github.com/openshift/cluster-network-operator/pkg/apis/networkoperator/v1
     vendor: github.com/openshift/cluster-network-operator/vendor
     go_type: NetworkConfig
@@ -101,6 +87,13 @@ units:
     kube_group: machineconfiguration.openshift.io
     list: true
     kube_namespace: openshift-machine-config-operator
+
+  - package: github.com/openshift/cluster-node-tuning-operator/pkg/apis/tuned/v1alpha1/
+    vendor: github.com/openshift/cluster-node-tuning-operator/vendor
+    go_type: Tuned
+    kube_name: default
+    namespace: openshift-cluster-node-tuning-operator
+
 
 - class: ControlPlaneConfigDefinition
   name: controlplane
