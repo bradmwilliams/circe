@@ -173,7 +173,7 @@ type StructGen struct {
 // If there is a direct mapping or helper class for a type in Java land, add it to this
 // map so that no effort will be made trying to map the structure into Java.
 var simpleJavaTypeMap = map[string]string {
-	"RawExtension" : "String",
+	"RawExtension" : "Bean",
 	"Quantity" : "Quantity",
 	"Secret" : "Secret",
 }
