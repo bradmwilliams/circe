@@ -101,23 +101,11 @@ units:
 
   elements:
 
-  - package: github.com/openshift/api/kubecontrolplane/v1
-    vendor: github.com/openshift/api/vendor
-    go_type: KubeAPIServerConfig
-    kube_group: kubecontrolplane.config.openshift.io
-    kube_name: cluster
-
   - package: github.com/openshift/api/operator/v1
     vendor: github.com/openshift/api/vendor
     go_type: KubeAPIServer
     class: KubeAPIServerOperator
     kube_group: operator.openshift.io
-    kube_name: cluster
-
-  - package: github.com/openshift/api/openshiftcontrolplane/v1
-    vendor: github.com/openshift/api/vendor
-    go_type: OpenShiftAPIServerConfig
-    kube_group: openshiftcontrolplane.config.openshift.io
     kube_name: cluster
 
   - package: github.com/openshift/api/operator/v1
@@ -133,6 +121,11 @@ units:
     list: true
 
   # Each openshift / kubeserver plugin override is modeled, but they do not stand alone, model_only: true
+
+  - package: github.com/openshift/api/config/v1
+    vendor: github.com/openshift/api/vendor
+    go_type: GenericAPIServerConfig
+    model_only: true
 
   # kubeapi admission: https://github.com/openshift/origin/blob/912680ac249a4c9268253b83934dd4af1f808ac4/pkg/cmd/openshift-kube-apiserver/kubeadmission/register.go#L57-L70
   - package: github.com/openshift/origin/pkg/autoscaling/admission/apis/clusterresourceoverride
