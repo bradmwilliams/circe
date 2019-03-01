@@ -32,7 +32,7 @@ units:
     kube_name: cluster
 
 
-- class: BuildConfigDefinition
+- class: BuildDefinition
   name: build
   version: v4.0
 
@@ -42,7 +42,6 @@ units:
     go_type: Build
     kube_group: config.openshift.io
     kube_name: cluster
-
 
 - class: AuthDefinition
   name: auth
@@ -159,20 +158,6 @@ units:
     kube_version: v1
     model_only: true
     kube_group: image.openshift.io
-
-
-
-- class: BuildConfigDefinition
-  name: builds
-  version: v4.0
-
-  elements:
-
-  - package: github.com/openshift/api/config/v1
-    vendor: github.com/openshift/api/vendor
-    go_type: Build
-    kube_group: config.openshift.io
-    kube_name: cluster
 
 - class: ConsoleDefinition
   name: console
