@@ -409,9 +409,9 @@ type OperatorConfig struct {
 	KubeVersion   string `yaml:"kube_version"`
 	KubeName      string `yaml:"kube_name"`
 	KubeNamespace string `yaml:"kube_namespace"`
-	ModuleOnly   bool `yaml:"module_only"`
+	ModelOnly     bool `yaml:"model_only"`
 	List          bool `yaml:"list"`
-	Map          bool `yaml:"map"`
+	Map           bool `yaml:"map"`
 }
 
 type Unit struct {
@@ -558,7 +558,7 @@ func main() {
 
 		jw.WriteString("\npublic interface " + className + " extends Definition {\n\n")
 		for _, oc := range unit.Elements {
-			if oc.ModuleOnly == false {
+			if oc.ModelOnly == false {
 				className := oc.GoType
 				if len(oc.Class) > 0 {
 					className = oc.Class
