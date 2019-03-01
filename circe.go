@@ -176,17 +176,25 @@ var simpleJavaTypeMap = map[string]string {
 	"RawExtension" : "Bean",
 	"Quantity" : "Quantity",
 	"Secret" : "Secret",
+	"Interface" : "Bean",
 }
 
-func (sg *StructGen) getJavaType(typ types.Type) string {
+func out(depth int, msg string) {
+	for i := 0; i < depth; i++ {
+		fmt.Print("\t")
+	}
+	fmt.Println(msg)
+}
+
+func (sg *StructGen) getJavaType(depth int, typ types.Type) string {
 	typeSplit := strings.Split(typ.String(), ".")
 	typeName := typeSplit[len(typeSplit) - 1]   // networkingconfig_types.NetworkConfig -> NetworkConfig ;  uint32 -> uint32
 	typeName = strings.Trim(typeName, "*") // ignore pointer vs non-pointer
 
-	fmt.Println("Attempt to coerce type to java: " + typeName)
+	out(depth, "Attempt to coerce type to java: " + typeName)
 
 	if simpleType, ok := simpleJavaTypeMap[typeName]; ok {
-		fmt.Println("  Coerced to simple type: " + simpleType);
+		out(depth, "  Coerced to simple type: " + simpleType);
 		return simpleType
 	}
 
@@ -207,23 +215,23 @@ func (sg *StructGen) getJavaType(typ types.Type) string {
 		}
 
 	case *types.Slice:
-		return "List<" + sg.getJavaType(ct.Elem()) + ">"
+		return "List<" + sg.getJavaType(depth, ct.Elem()) + ">"
 	case *types.Array:
-		return "List<" + sg.getJavaType(ct.Elem()) + ">"
+		return "List<" + sg.getJavaType(depth, ct.Elem()) + ">"
 	case *types.Map:
-		return "Map<" + sg.getJavaType(ct.Key()) + "," + sg.getJavaType(ct.Elem()) + ">"
+		return "Map<" + sg.getJavaType(depth, ct.Key()) + "," + sg.getJavaType(depth, ct.Elem()) + ">"
 	case *types.Pointer:
-		return sg.getJavaType(ct.Elem())
+		return sg.getJavaType(depth, ct.Elem())
 	case *types.Named:
 		// e.g. 'type SomeNamedType struct'    OR    'type SomeNamedType string|uint32...' <==basic
 		switch ut := ct.Underlying().(type) {
 		case *types.Struct:
-			fmt.Println("  Coercing to complex struct...");
-			sg.outputStruct(typeName, ut, "")
+			out(depth, "  Coercing to complex struct...");
+			sg.outputStruct(depth+1, typeName, ut, "")
 			return typeName
 		default:
-			fmt.Println("  Coercing to java type");
-			return sg.getJavaType(ut)
+			out(depth, "  Coercing to java type");
+			return sg.getJavaType(depth, ut)
 		}
 	default:
 		panic(fmt.Sprintf("I don't know how to translate type: %s", reflect.TypeOf(typ)))
@@ -234,7 +242,7 @@ func underscoreVersion(version string) string {
 	return strings.Replace(version, ".", "_", -1)
 }
 
-func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Struct, classNameOverride string) string {
+func (sg *StructGen) outputStruct(depth int, structName string, underlyingStruct *types.Struct, classNameOverride string) string {
 
 	goPkgSplit := strings.Split(strings.TrimRight(sg.goPkgDir, "/"), "/")
 	apiVersion := sg.config.KubeVersion
@@ -266,7 +274,7 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 
 	os.MkdirAll(modulePkgDir, 0755)
 	javaFilename := path.Join(modulePkgDir, classNameOverride + ".java")
-	fmt.Println("   Opening file: " + javaFilename)
+	out(depth, "   Opening file: " + javaFilename)
 	javaFile, err := os.OpenFile(javaFilename, os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
 	check(err)
 
@@ -298,12 +306,12 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 	for fi := 0; fi < underlyingStruct.NumFields(); fi++ {
 		fieldVar := underlyingStruct.Field(fi)
 
-		fmt.Println(fmt.Sprintf("Processing field: %s", fieldVar))
+		out(depth, fmt.Sprintf("Processing field: %s", fieldVar))
 
-		fmt.Printf("Testing: %s\n", fieldVar.Type().String())
+		out(depth, "Testing: " + fieldVar.Type().String())
 
 		if strings.HasSuffix(fieldVar.Type().String(), "TypeMeta") {
-			fmt.Println("Skipping TypeMeta")
+			out(depth, "Skipping TypeMeta")
 			jw.WriteString(fmt.Sprintf("\tdefault String getKind() { return %q; }\n", structName))
 
 			if len(sg.config.KubeGroup) > 0 {
@@ -314,7 +322,7 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 		}
 
 		if strings.HasSuffix(fieldVar.Type().String(), "ObjectMeta") {
-			fmt.Println("Processing ObjectMeta")
+			out(depth, "Processing ObjectMeta")
 
 			jw.WriteString("\t@YamlPropertyIgnore\n")
 			jw.WriteString(fmt.Sprintf("\tdefault String _getGeneratorNamespaceHint() { return %q; }\n", sg.config.KubeNamespace))
@@ -350,21 +358,27 @@ func (sg *StructGen) outputStruct(structName string, underlyingStruct *types.Str
 				continue
 			}
 
-			fmt.Println("Found jsonName: ", jsonName)
+			out(depth, "Found jsonName: " + jsonName)
 			if jsonName == "status" {
-				fmt.Println("Skipping status field")
+				out(depth, "Skipping status field")
 				continue
 			}
 
-			javaType := sg.getJavaType(fieldVar.Type())
+			if jsonName == "-" {
+				// https://github.com/openshift/origin/blob/29f688498ec658a22daac7dbe37502d05b7af64d/pkg/image/apiserver/admission/apis/imagepolicy/v1/types.go#L119
+				out(depth, "Skipping internal field")
+				continue
+			}
+
+			javaType := sg.getJavaType(depth, fieldVar.Type())
 			inline := fieldVar.Anonymous() || strings.Contains(jsonTag, ",inline")
 			writeGetterMethodSig(javaType, fieldVar.Name(), inline, jsonName)
 		} else {
 			panic(fmt.Sprintf("Unable to find json name for: %s", fieldVar.String()))
 		}
 
-		fmt.Println(fieldVar)
-		fmt.Println()
+		out(depth, fieldVar.String())
+		out(depth, "")
 	}
 
 	jw.WriteString(fmt.Sprintf("\tinterface EZ extends %s {\n\n", classNameOverride))
@@ -500,7 +514,8 @@ func main() {
 				outputDone: make(map[string]bool),
 			}
 
-			modulePackage := sg.outputStruct(structName, underlyingStruct, oc.Class)
+			out(0, "Processing unit: " + unit.Name + "=>" + structName)
+			modulePackage := sg.outputStruct(1, structName, underlyingStruct, oc.Class)
 			unit.JavaImports = append(unit.JavaImports, modulePackage)
 
 		}
