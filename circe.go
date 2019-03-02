@@ -275,6 +275,7 @@ func (sg *StructGen) outputStruct(depth int, structName string, underlyingStruct
 	os.MkdirAll(modulePkgDir, 0755)
 	javaFilename := path.Join(modulePkgDir, classNameOverride + ".java")
 	out(depth, "   Opening file: " + javaFilename)
+
 	javaFile, err := os.OpenFile(javaFilename, os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
 	check(err)
 
@@ -435,6 +436,8 @@ func main() {
 	fmt.Println(fmt.Sprintf("Found %d ClusterDefinition rules", len(guide.Units)))
 
 	outputDir := "render/src/generated/java"
+	os.RemoveAll(outputDir)
+
 	basePkg := "com.github.openshift.circe.gen"
 	basePackageDir := path.Join(outputDir, strings.Replace(basePkg, ".", "/", -1))
 	beanPkg := "com.github.openshift.circe.beans"

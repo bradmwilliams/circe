@@ -1,6 +1,6 @@
 units:
 
-- class: NetworkDefinition
+- class: NetworkUnit
   name: network
   version: v4.0
 
@@ -11,7 +11,7 @@ units:
     kube_name: default
 
 
-- class: ProjectConfigDefinition
+- class: ProjectUnit
   name: project
   version: v4.0
 
@@ -32,7 +32,7 @@ units:
     kube_name: cluster
 
 
-- class: BuildDefinition
+- class: BuildUnit
   name: build
   version: v4.0
 
@@ -43,7 +43,7 @@ units:
     kube_group: config.openshift.io
     kube_name: cluster
 
-- class: AuthDefinition
+- class: AuthUnit
   name: auth
   version: v4.0
 
@@ -68,7 +68,7 @@ units:
     kube_name: cluster
 
 
-- class: MachineConfigDefinition
+- class: MachineConfigrationUnit
   name: machineconfig
   version: v4.0
 
@@ -94,8 +94,8 @@ units:
     namespace: openshift-cluster-node-tuning-operator
 
 
-- class: ControlPlaneConfigDefinition
-  name: controlplane
+- class: KubeControlPlaneUnit
+  name: kubecontrolplane
   version: v4.0
 
   elements:
@@ -107,11 +107,10 @@ units:
     kube_group: operator.openshift.io
     kube_name: cluster
 
-  - package: github.com/openshift/api/operator/v1
+  - package: github.com/openshift/api/kubecontrolplane/v1
     vendor: github.com/openshift/api/vendor
-    go_type: OpenShiftAPIServer
-    class: OpenShiftAPIServerOperator
-    kube_group: operator.openshift.io
+    go_type: KubeControllerManagerConfig
+    kube_group: kubecontrolplane.config.openshift.io
     kube_name: cluster
 
   - package: k8s.io/api/admissionregistration/v1beta1
@@ -140,12 +139,32 @@ units:
     kube_group: autoscaling.openshift.io
 
 
-  # openshiftapi admission: https://github.com/openshift/origin/blob/912680ac249a4c9268253b83934dd4af1f808ac4/pkg/cmd/openshift-apiserver/openshiftadmission/register.go#L47-L66
-  - package: github.com/openshift/origin/pkg/autoscaling/admission/apis/clusterresourceoverride
-    go_type: ClusterResourceOverrideConfig
-    kube_version: v1
+
+- class: OpenShiftControlPlaneUnit
+  name: openshiftcontrolplane
+  version: v4.0
+
+  elements:
+
+  - package: github.com/openshift/api/operator/v1
+    vendor: github.com/openshift/api/vendor
+    go_type: OpenShiftAPIServer
+    class: OpenShiftAPIServerOperator
+    kube_group: operator.openshift.io
+    kube_name: cluster
+
+  - package: github.com/openshift/api/openshiftcontrolplane/v1
+    vendor: github.com/openshift/api/vendor
+    go_type: OpenShiftControllerManagerConfig
+    kube_group: openshiftcontrolplane.config.openshift.io
+    kube_name: cluster
+
+  # Each openshift / kubeserver plugin override is modeled, but they do not stand alone, model_only: true
+
+  - package: github.com/openshift/api/config/v1
+    vendor: github.com/openshift/api/vendor
+    go_type: GenericAPIServerConfig
     model_only: true
-    kube_group: autoscaling.openshift.io
 
   - package: github.com/openshift/origin/pkg/project/apiserver/admission/apis/requestlimit/v1
     go_type: ProjectRequestLimitConfig
@@ -159,7 +178,10 @@ units:
     model_only: true
     kube_group: image.openshift.io
 
-- class: ConsoleDefinition
+
+
+
+- class: ConsoleUnit
   name: console
   version: v4.0
 
