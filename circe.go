@@ -283,6 +283,7 @@ func (sg *StructGen) outputStruct(depth int, structName string, underlyingStruct
 
 	jw := bufio.NewWriter(javaFile)
 
+	jw.WriteString("// GENERATED FILE -- DO NOT ALTER (circe.go)\n\n")
 	jw.WriteString(fmt.Sprintf("package %s;\n", modulePackage))
 
 	jw.WriteString("import " + sg.beanPkg + ".*;\n")
@@ -433,7 +434,7 @@ func main() {
 	check(err)
 	guide := GuideYaml{}
 	yaml.Unmarshal(yamlFile, &guide)
-	fmt.Println(fmt.Sprintf("Found %d ClusterDefinition rules", len(guide.Units)))
+	fmt.Println(fmt.Sprintf("Found %d units", len(guide.Units)))
 
 	outputDir := "render/src/generated/java"
 	os.RemoveAll(outputDir)
@@ -456,13 +457,15 @@ func main() {
 	}
 
 	os.MkdirAll(basePackageDir, 0750)
-	definitionsEnumFile, err := os.OpenFile(path.Join(basePackageDir, "DefinitionType.java"), os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
+	unitsEnumType, err := os.OpenFile(path.Join(basePackageDir, "UnitType.java"), os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
 	check(err)
 
-	defsEnumWriter := bufio.NewWriter(definitionsEnumFile)
-	defsEnumWriter.WriteString("package " + basePkg + ";\n\n")
+	unitEnumWriter := bufio.NewWriter(unitsEnumType)
+	unitEnumWriter.WriteString("// GENERATED FILE -- DO NOT ALTER (circe.go)\n\n")
 
-	defsEnumWriter.WriteString("\npublic enum DefinitionType {\n\n")
+	unitEnumWriter.WriteString("package " + basePkg + ";\n\n")
+
+	unitEnumWriter.WriteString("\npublic enum UnitType {\n\n")
 
 	for _, unit := range guide.Units {
 		className := unit.Class
@@ -523,21 +526,22 @@ func main() {
 
 		}
 
-		defUnderscoreVersion := underscoreVersion(unit.Version)
+		unitUnderscoreVersion := underscoreVersion(unit.Version)
 
-		defPkgDir := path.Join(basePackageDir, "def", defUnderscoreVersion)
-		defPkg := strings.Join([]string{basePkg, "def", defUnderscoreVersion}, ".")
-		defClassName := strings.Join([]string{basePkg, "def", defUnderscoreVersion, className, "class"}, ".")
-		defHumanName := fmt.Sprintf("%s-%s", unit.Version, unit.Name)
+		unitPkgDir := path.Join(basePackageDir, "units", unitUnderscoreVersion)
+		unitPkg := strings.Join([]string{basePkg, "units", unitUnderscoreVersion}, ".")
+		unitClassName := strings.Join([]string{basePkg, "units", unitUnderscoreVersion, className, "class"}, ".")
+		unitHumanName := fmt.Sprintf("%s-%s", unit.Version, unit.Name)
 
-		os.MkdirAll(defPkgDir, 0755)
-		javaFile, err := os.OpenFile(path.Join(defPkgDir, className + ".java"), os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
+		os.MkdirAll(unitPkgDir, 0755)
+		javaFile, err := os.OpenFile(path.Join(unitPkgDir, className + ".java"), os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
 		check(err)
 
-		defsEnumWriter.WriteString(fmt.Sprintf("\t%s_%s(%s, %q, %q),\n", defUnderscoreVersion, unit.Name, defClassName, unit.Name, defHumanName))
+		unitEnumWriter.WriteString(fmt.Sprintf("\t%s_%s(%s, %q, %q),\n", unitUnderscoreVersion, unit.Name, unitClassName, unit.Name, unitHumanName))
 
 		jw := bufio.NewWriter(javaFile)
-		jw.WriteString("package " + defPkg + ";\n\n")
+		jw.WriteString("// GENERATED FILE -- DO NOT ALTER (circe.go)\n\n")
+		jw.WriteString("package " + unitPkg + ";\n\n")
 
 		jw.WriteString("import java.util.*;\n")
 		jw.WriteString("import com.github.openshift.circe.yaml.*;\n")
@@ -559,7 +563,7 @@ func main() {
 		}
 
 
-		jw.WriteString("\npublic interface " + className + " extends Definition {\n\n")
+		jw.WriteString("\npublic interface " + className + " extends UnitBase {\n\n")
 		for _, oc := range unit.Elements {
 			if oc.ModelOnly == false {
 				className := oc.GoType
@@ -592,17 +596,17 @@ func main() {
 		javaFile.Close()
 	}
 
-	defsEnumWriter.WriteString("\t;\n\n") // end the enum element list
+	unitEnumWriter.WriteString("\t;\n\n") // end the enum element list
 
-	defsEnumWriter.WriteString("\tpublic Class<?> mustImplementClass;\n\n" );
-	defsEnumWriter.WriteString("\tpublic String unitName;\n\n" );
-	defsEnumWriter.WriteString("\tpublic String humanName;\n\n" );
+	unitEnumWriter.WriteString("\tpublic Class<?> mustImplementClass;\n\n" );
+	unitEnumWriter.WriteString("\tpublic String unitName;\n\n" );
+	unitEnumWriter.WriteString("\tpublic String humanName;\n\n" );
 
-	defsEnumWriter.WriteString("\tDefinitionType(Class<?> mustImplementClass, String unitName, String humanName) { this.mustImplementClass = mustImplementClass; this.unitName = unitName; this.humanName = humanName; }\n" );
+	unitEnumWriter.WriteString("\tUnitType(Class<?> mustImplementClass, String unitName, String humanName) { this.mustImplementClass = mustImplementClass; this.unitName = unitName; this.humanName = humanName; }\n" );
 
-	defsEnumWriter.WriteString("\n}\n")
-	defsEnumWriter.Flush()
-	definitionsEnumFile.Close()
+	unitEnumWriter.WriteString("\n}\n")
+	unitEnumWriter.Flush()
+	unitsEnumType.Close()
 
 
 	return
