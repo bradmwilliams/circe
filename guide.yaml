@@ -110,11 +110,11 @@ units:
 
       # The KubeAPIServerOperator spec is effectively OperatorSpec inline and its
       # unsupported overrides https://github.com/openshift/api/blob/5cb14cba537a6f2540a3df5b17d47668cff7d655/operator/v1/types.go#L59
-      # The overrides structure points to GenericAPIServerConfig.
+      # The overrides structure points to KubeAPIServerConfig (which inlines GenericAPIServerConfig).
 
-      - package: github.com/openshift/api/config/v1
+      - package: github.com/openshift/api/kubecontrolplane/v1
         vendor: github.com/openshift/api/vendor
-        go_type: GenericAPIServerConfig
+        go_type: KubeAPIServerConfig
 
       # kubeapi admission: https://github.com/openshift/origin/blob/912680ac249a4c9268253b83934dd4af1f808ac4/pkg/cmd/openshift-kube-apiserver/kubeadmission/register.go#L57-L70
       - package: github.com/openshift/origin/pkg/autoscaling/admission/apis/clusterresourceoverride
@@ -167,10 +167,9 @@ units:
     kube_name: cluster
     sub_models:
 
-    - package: github.com/openshift/api/config/v1
+    - package: github.com/openshift/api/openshiftcontrolplane/v1
       vendor: github.com/openshift/api/vendor
-      go_type: GenericAPIServerConfig
-      model_only: true
+      go_type: OpenShiftAPIServerConfig
 
     - package: github.com/openshift/origin/pkg/project/apiserver/admission/apis/requestlimit/v1
       go_type: ProjectRequestLimitConfig
