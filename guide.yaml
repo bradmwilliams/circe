@@ -115,6 +115,7 @@ units:
       - package: github.com/openshift/api/kubecontrolplane/v1
         vendor: github.com/openshift/api/vendor
         go_type: KubeAPIServerConfig
+        kube_group: kubecontrolplane.config.openshift.io
 
       # kubeapi admission: https://github.com/openshift/origin/blob/912680ac249a4c9268253b83934dd4af1f808ac4/pkg/cmd/openshift-kube-apiserver/kubeadmission/register.go#L57-L70
       - package: github.com/openshift/origin/pkg/autoscaling/admission/apis/clusterresourceoverride
@@ -170,6 +171,7 @@ units:
     - package: github.com/openshift/api/openshiftcontrolplane/v1
       vendor: github.com/openshift/api/vendor
       go_type: OpenShiftAPIServerConfig
+      kube_group: openshiftcontrolplane.config.openshift.io
 
     - package: github.com/openshift/origin/pkg/project/apiserver/admission/apis/requestlimit/v1
       go_type: ProjectRequestLimitConfig
