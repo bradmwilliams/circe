@@ -166,7 +166,7 @@ type StructGen struct {
 	javaPkgDir string
 	pkg        string
 	beanPkg    string
-	config     OperatorConfig
+	config     ModelConfig
 	outputDone map[string]bool
 }
 
@@ -395,7 +395,7 @@ func (sg *StructGen) outputStruct(depth int, structName string, underlyingStruct
 	return modulePackage
 }
 
-type OperatorConfig struct {
+type ModelConfig struct {
 	// Override the name of the Java class name
 	Class         string `yaml:"class"`
 
@@ -414,13 +414,25 @@ type OperatorConfig struct {
 	ModelOnly     bool `yaml:"model_only"`
 	List          bool `yaml:"list"`
 	Map           bool `yaml:"map"`
+
+	// Elements that should only be modeled
+	SubModels    []ModelConfig `yaml:"sub_models"`
 }
 
 type Unit struct {
+	// The name of the Java interface that must be implemented for the Unit
 	Class       string `yaml:"class"`
+
+	// Human name for the Unit
 	Name        string `yaml:"name"`
+
+	// Which version of OpenShift the Unit is appropriate for
 	Version     string `yaml:"version"`
-	Elements    []OperatorConfig `yaml:"elements"`
+
+	// The ModelConfig elements that make up the Unit
+	Elements    []ModelConfig `yaml:"elements"`
+
+
 	JavaImports []string  `yaml:"imports"`
 }
 
@@ -474,28 +486,27 @@ func main() {
 		// on the cluster in specific order. Their order in the source yaml is honored.
 		renderOrderHint := 1;
 
-		fmt.Println("Generating unit: " + className)
-		for _, oc := range unit.Elements {
+		renderModel := func(modelConfig ModelConfig)  {
 
 			// If the go type has a Java type already associated, don't bother generating java
-			if _, ok := simpleJavaTypeMap[oc.GoType]; ok {
-				continue;
+			if _, ok := simpleJavaTypeMap[modelConfig.GoType]; ok {
+				return
 			}
 
 			// Create an importer that will search go elements for the main package
 			// Also specify vendor directory which element may have specified.
 			importer := dynimporter{
 				paths: importerPaths,
-				vendorDir: oc.VendorDir,
+				vendorDir: modelConfig.VendorDir,
 			}
 
-			goPkgDir := oc.PkgDir
+			goPkgDir := modelConfig.PkgDir
 			pkg, err := importer.Import(goPkgDir)
 			check(err)
 
-			className := oc.GoType
-			if len(oc.Class) > 0 {
-				className = oc.Class
+			className := modelConfig.GoType
+			if len(modelConfig.Class) > 0 {
+				className = modelConfig.Class
 			}
 
 			shortPkgName := strings.ToLower(className)
@@ -505,8 +516,8 @@ func main() {
 			os.MkdirAll(javaPkgDir, 0750)
 
 			scope := pkg.Scope()
-			obj := scope.Lookup(oc.GoType)
-			fmt.Println("Loaded", oc.GoType, "=>", obj.String())
+			obj := scope.Lookup(modelConfig.GoType)
+			fmt.Println("Loaded", modelConfig.GoType, "=>", obj.String())
 			named := obj.Type().(*types.Named)  // .Type() returns the type of the language element. We assume it is a named type.
 			underlyingStruct := named.Underlying().(*types.Struct) // The underlying type of the object should be a struct
 			structName := obj.Name() // obj.Name()  example: "NetworkConfig"
@@ -516,13 +527,25 @@ func main() {
 				javaPkgDir: javaPkgDir,
 				pkg: packageName,
 				beanPkg: beanPkg,
-				config: oc,
+				config: modelConfig,
 				outputDone: make(map[string]bool),
 			}
 
 			out(0, "Processing unit: " + unit.Name + "=>" + structName)
-			modulePackage := sg.outputStruct(1, structName, underlyingStruct, oc.Class)
+			modulePackage := sg.outputStruct(1, structName, underlyingStruct, modelConfig.Class)
 			unit.JavaImports = append(unit.JavaImports, modulePackage)
+
+		}
+
+		fmt.Println("Generating unit: " + className)
+		for _, modelConfig := range unit.Elements {
+
+			renderModel(modelConfig)
+
+			for _, sub := range modelConfig.SubModels {
+				sub.ModelOnly = true
+				renderModel(sub)
+			}
 
 		}
 
