@@ -78,20 +78,18 @@ units:
     go_type: MachineConfigPool
     kube_group: machineconfiguration.openshift.io
     list: true
-    kube_namespace: openshift-machine-config-operator
 
   - package: github.com/openshift/machine-config-operator/pkg/apis/machineconfiguration.openshift.io/v1
     vendor: github.com/openshift/machine-config-operator/vendor
     go_type: MachineConfig
     kube_group: machineconfiguration.openshift.io
     list: true
-    kube_namespace: openshift-machine-config-operator
 
   - package: github.com/openshift/cluster-node-tuning-operator/pkg/apis/tuned/v1alpha1/
     vendor: github.com/openshift/cluster-node-tuning-operator/vendor
     go_type: Tuned
-    kube_name: default
     namespace: openshift-cluster-node-tuning-operator
+    list: true
 
 
 - class: KubeControlPlaneUnit
