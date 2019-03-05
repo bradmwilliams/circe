@@ -92,6 +92,27 @@ units:
     list: true
 
 
+- class: OpenShiftIngressUnit
+  name: openshiftingress
+  version: v4.0
+  elements:
+  - package: github.com/openshift/cluster-ingress-operator/pkg/apis/ingress/v1alpha1
+    vendor: github.com/openshift/cluster-ingress-operator/vendor
+    go_type: ClusterIngress
+    kube_group: ingress.openshift.io
+    kube_name: cluster
+
+- class: ControlPlaneUnit
+  name: controlplane
+  version: v4.0
+  elements:
+  - package: github.com/openshift/api/config/v1
+    vendor: github.com/openshift/api/vendor
+    go_type: APIServer
+    kube_group: config.openshift.io
+    kube_name: cluster
+
+
 - class: KubeControlPlaneUnit
   name: kubecontrolplane
   version: v4.0
