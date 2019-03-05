@@ -100,7 +100,8 @@ units:
     vendor: github.com/openshift/cluster-ingress-operator/vendor
     go_type: ClusterIngress
     kube_group: ingress.openshift.io
-    kube_name: cluster
+    kube_namespace: openshift-ingress-operator
+    kube_name: default
 
 - class: ControlPlaneUnit
   name: controlplane
