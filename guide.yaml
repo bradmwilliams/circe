@@ -1,14 +1,15 @@
 units:
 
-- class: NetworkUnit
-  name: network
-  version: v4.0
+# TODO: This has been moved - presumably to config/api - find and implement
+#- class: NetworkUnit
+#  name: network
+#  version: v4.0
 
-  elements:
-  - package: github.com/openshift/cluster-network-operator/pkg/apis/networkoperator/v1
-    vendor: github.com/openshift/cluster-network-operator/vendor
-    go_type: NetworkConfig
-    kube_name: default
+  #elements:
+  #- package: github.com/openshift/cluster-network-operator/pkg/apis/networkoperator/v1
+  #  vendor: github.com/openshift/cluster-network-operator/vendor
+  #  go_type: NetworkConfig
+  #  kube_name: default
 
 
 - class: ProjectUnit
@@ -85,11 +86,12 @@ units:
     kube_group: machineconfiguration.openshift.io
     list: true
 
-  - package: github.com/openshift/cluster-node-tuning-operator/pkg/apis/tuned/v1alpha1/
-    vendor: github.com/openshift/cluster-node-tuning-operator/vendor
-    go_type: Tuned
-    namespace: openshift-cluster-node-tuning-operator
-    list: true
+  # TODO: This has been moved. Find and implement.
+  #- package: github.com/openshift/cluster-node-tuning-operator/pkg/apis/tuned/v1alpha1/
+  #  vendor: github.com/openshift/cluster-node-tuning-operator/vendor
+  #  go_type: Tuned
+  #  namespace: openshift-cluster-node-tuning-operator
+  #  list: true
 
 
 - class: OpenShiftIngressUnit
