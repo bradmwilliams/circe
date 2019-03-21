@@ -104,7 +104,8 @@ units:
     go_type: IngressController
     class: IngressControllerOperator
     kube_group: operator.openshift.io
-    kube_name: cluster
+    kube_name: default
+    kube_namespace: openshift-ingress-operator
 
   - package: k8s.io/api/core/v1
     vendor: k8s.io/api/vendor
