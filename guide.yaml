@@ -39,7 +39,7 @@ units:
 
   elements:
   - package: github.com/openshift/api/config/v1
-    vendor: github.com/openshift/vendor
+    vendor: github.com/openshift/api/vendor
     go_type: Build
     kube_group: config.openshift.io
     kube_name: cluster
@@ -152,6 +152,11 @@ units:
         go_type: ClusterResourceOverrideConfig
         kube_version: v1
         kube_group: autoscaling.openshift.io
+
+      - package: github.com/openshift/origin/vendor/k8s.io/kubernetes/plugin/pkg/admission/podnodeselector
+        go_type: pluginConfig
+        class: PodNodeSelectorConfig
+        kube_version: v1
 
       - package: github.com/openshift/origin/pkg/autoscaling/admission/apis/runonceduration
         go_type: RunOnceDurationConfig

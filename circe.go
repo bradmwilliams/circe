@@ -41,11 +41,13 @@ func (importer dynimporter) Import(goPkgName string) (*types.Package, error) {
 		return v, nil
 	}
 
-	fmt.Println("\n\nProcessing import", goPkgName)
+	fmt.Println("\n\nImport requested", goPkgName)
 	if (!strings.HasPrefix(goPkgName, "github.com/") && !strings.Contains(goPkgName, "k8s")) {
 		fmt.Println("SKIPPING!", goPkgName)
 		return nil, errors.New("Skipping since it is outside k8s/openshift")
 	}
+	fmt.Println("\n\nProcessing import", goPkgName)
+
 
 	fsetBase := token.NewFileSet()
 
@@ -177,6 +179,7 @@ var simpleJavaTypeMap = map[string]string {
 	"Quantity" : "Quantity",
 	"Secret" : "Secret",
 	"Interface" : "Bean",
+	"Duration" : "Duration",
 }
 
 func out(depth int, msg string) {
@@ -467,6 +470,7 @@ func main() {
 	for _, entry := range strings.Split(gopath, ":") {
 		importerPaths = append(importerPaths, path.Join(entry, "src"))
 	}
+	fmt.Println(fmt.Sprintf("Loaded go paths: %v", importerPaths))
 
 	os.MkdirAll(basePackageDir, 0750)
 	unitsEnumType, err := os.OpenFile(path.Join(basePackageDir, "UnitType.java"), os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
