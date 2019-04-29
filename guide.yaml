@@ -259,4 +259,15 @@ units:
     kube_group: operator.openshift.io
     kube_name: cluster
 
+- class: MonitoringUnit
+  name: monitoring
+  version: v4.0
+  elements:
 
+  # https://bugzilla.redhat.com/show_bug.cgi?id=1703890
+  - package: k8s.io/api/core/v1
+    go_type: ConfigMap
+    kube_version: v1
+    kube_name: cluster-monitoring-config
+    kube_namespace: openshift-monitoring
+     
