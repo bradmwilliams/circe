@@ -29,7 +29,7 @@ func check(e error) {
 
 type dynimporter struct {
 	// paths which will be scanned for /<go package> during Import
-	paths []string
+	paths     []string
 	vendorDir string
 }
 
@@ -42,12 +42,11 @@ func (importer dynimporter) Import(goPkgName string) (*types.Package, error) {
 	}
 
 	fmt.Println("\n\nImport requested", goPkgName)
-	if (!strings.HasPrefix(goPkgName, "github.com/") && !strings.Contains(goPkgName, "k8s")) {
+	if !strings.HasPrefix(goPkgName, "github.com/") && !strings.Contains(goPkgName, "k8s") {
 		fmt.Println("SKIPPING!", goPkgName)
 		return nil, errors.New("Skipping since it is outside k8s/openshift")
 	}
 	fmt.Println("\n\nProcessing import", goPkgName)
-
 
 	fsetBase := token.NewFileSet()
 
@@ -55,9 +54,9 @@ func (importer dynimporter) Import(goPkgName string) (*types.Package, error) {
 		checkDir := path.Join(srcDir, goPkgName)
 		_, err := os.Stat(checkDir)
 
-		if ( err != nil ) {
+		if err != nil {
 			if os.IsNotExist(err) {
-				continue;
+				continue
 			} else {
 				return nil, errors.New("Error scanning for package: " + err.Error())
 			}
@@ -71,14 +70,14 @@ func (importer dynimporter) Import(goPkgName string) (*types.Package, error) {
 			vendorPath := path.Join(srcDir, importer.vendorDir)
 			paths := append([]string{vendorPath}, importer.paths...)
 			nextImporter = dynimporter{
-				paths: paths,
+				paths:     paths,
 				vendorDir: "",
 			}
 		}
 
 		asts, err := parser.ParseDir(fsetBase, checkDir, nil, parser.ParseComments)
 
-		conf := types.Config{IgnoreFuncBodies: true, Importer:nextImporter, DisableUnusedImportCheck: true}
+		conf := types.Config{IgnoreFuncBodies: true, Importer: nextImporter, DisableUnusedImportCheck: true}
 		conf.Error = func(err error) {
 			log.Println("Error during check 2: ", err)
 		}
@@ -125,7 +124,7 @@ func toLowerCamelcase(name string) string {
 		}
 		if toggle && unicode.IsUpper(r) {
 			// If "TLSVerify", we want tlsVerify, so look ahead unless we are at the end
-			if i == 0 || len(runes) == i + 1 || unicode.IsLower(runes[i + 1]) == false {
+			if i == 0 || len(runes) == i+1 || unicode.IsLower(runes[i+1]) == false {
 				newRunes[i] = unicode.ToLower(r)
 			} else {
 				newRunes[i] = r
@@ -174,12 +173,12 @@ type StructGen struct {
 
 // If there is a direct mapping or helper class for a type in Java land, add it to this
 // map so that no effort will be made trying to map the structure into Java.
-var simpleJavaTypeMap = map[string]string {
-	"RawExtension" : "Bean",
-	"Quantity" : "Quantity",
-	"Secret" : "Secret",
-	"Interface" : "Bean",
-	"Duration" : "Duration",
+var simpleJavaTypeMap = map[string]string{
+	"RawExtension": "Bean",
+	"Quantity":     "Quantity",
+	"Secret":       "Secret",
+	"Interface":    "Bean",
+	"Duration":     "Duration",
 }
 
 func out(depth int, msg string) {
@@ -191,13 +190,13 @@ func out(depth int, msg string) {
 
 func (sg *StructGen) getJavaType(depth int, typ types.Type) string {
 	typeSplit := strings.Split(typ.String(), ".")
-	typeName := typeSplit[len(typeSplit) - 1]   // networkingconfig_types.NetworkConfig -> NetworkConfig ;  uint32 -> uint32
-	typeName = strings.Trim(typeName, "*") // ignore pointer vs non-pointer
+	typeName := typeSplit[len(typeSplit)-1] // networkingconfig_types.NetworkConfig -> NetworkConfig ;  uint32 -> uint32
+	typeName = strings.Trim(typeName, "*")  // ignore pointer vs non-pointer
 
-	out(depth, "Attempt to coerce type to java: " + typeName)
+	out(depth, "Attempt to coerce type to java: "+typeName)
 
 	if simpleType, ok := simpleJavaTypeMap[typeName]; ok {
-		out(depth, "  Coerced to simple type: " + simpleType);
+		out(depth, "  Coerced to simple type: "+simpleType)
 		return simpleType
 	}
 
@@ -229,11 +228,11 @@ func (sg *StructGen) getJavaType(depth int, typ types.Type) string {
 		// e.g. 'type SomeNamedType struct'    OR    'type SomeNamedType string|uint32...' <==basic
 		switch ut := ct.Underlying().(type) {
 		case *types.Struct:
-			out(depth, "  Coercing to complex struct...");
+			out(depth, "  Coercing to complex struct...")
 			sg.outputStruct(depth+1, typeName, ut, "")
 			return typeName
 		default:
-			out(depth, "  Coercing to java type");
+			out(depth, "  Coercing to java type")
 			return sg.getJavaType(depth, ut)
 		}
 	default:
@@ -250,13 +249,13 @@ func (sg *StructGen) outputStruct(depth int, structName string, underlyingStruct
 	goPkgSplit := strings.Split(strings.TrimRight(sg.goPkgDir, "/"), "/")
 	apiVersion := sg.config.KubeVersion
 	if len(apiVersion) == 0 {
-		apiVersion = goPkgSplit[len(goPkgSplit) - 1]
+		apiVersion = goPkgSplit[len(goPkgSplit)-1]
 		if strings.HasPrefix(apiVersion, "v") == false {
 			panic("Unable to autodetect apiVersion for package (add kube_version in guide.yaml): " + sg.config.PkgDir)
 		}
 	}
 
-	version_underscore := underscoreVersion(apiVersion);
+	version_underscore := underscoreVersion(apiVersion)
 
 	modulePackage := fmt.Sprintf("%s.%s", sg.pkg, version_underscore)
 	modulePkgDir := path.Join(sg.javaPkgDir, version_underscore)
@@ -276,10 +275,10 @@ func (sg *StructGen) outputStruct(depth int, structName string, underlyingStruct
 	}
 
 	os.MkdirAll(modulePkgDir, 0755)
-	javaFilename := path.Join(modulePkgDir, classNameOverride + ".java")
-	out(depth, "   Opening file: " + javaFilename)
+	javaFilename := path.Join(modulePkgDir, classNameOverride+".java")
+	out(depth, "   Opening file: "+javaFilename)
 
-	javaFile, err := os.OpenFile(javaFilename, os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
+	javaFile, err := os.OpenFile(javaFilename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0750)
 	check(err)
 
 	defer javaFile.Close()
@@ -313,7 +312,7 @@ func (sg *StructGen) outputStruct(depth int, structName string, underlyingStruct
 
 		out(depth, fmt.Sprintf("Processing field: %s", fieldVar))
 
-		out(depth, "Testing: " + fieldVar.Type().String())
+		out(depth, "Testing: "+fieldVar.Type().String())
 
 		if strings.HasSuffix(fieldVar.Type().String(), "TypeMeta") {
 			out(depth, "Skipping TypeMeta")
@@ -335,8 +334,7 @@ func (sg *StructGen) outputStruct(depth int, structName string, underlyingStruct
 			jw.WriteString("\t@YamlPropertyIgnore\n")
 			jw.WriteString(fmt.Sprintf("\tdefault String _getGeneratorNameHint() { return %q; }\n", sg.config.KubeName))
 
-
-			if  sg.config.List || sg.config.Map {
+			if sg.config.List || sg.config.Map {
 				jw.WriteString("\tObjectMeta getMetadata() throws Exception;\n")
 			} else {
 				jw.WriteString("\tdefault ObjectMeta getMetadata() throws Exception { return new ObjectMeta(_getGeneratorNamespaceHint(), _getGeneratorNameHint()); }\n")
@@ -363,7 +361,7 @@ func (sg *StructGen) outputStruct(depth int, structName string, underlyingStruct
 				continue
 			}
 
-			out(depth, "Found jsonName: " + jsonName)
+			out(depth, "Found jsonName: "+jsonName)
 			if jsonName == "status" {
 				out(depth, "Skipping status field")
 				continue
@@ -388,11 +386,11 @@ func (sg *StructGen) outputStruct(depth int, structName string, underlyingStruct
 
 	jw.WriteString(fmt.Sprintf("\tinterface EZ extends %s {\n\n", classNameOverride))
 	for _, ezDefault := range ezDefaults {
-		jw.WriteString(ezDefault);
+		jw.WriteString(ezDefault)
 	}
 	jw.WriteString("\t}\n\n") // close EZ interface
 
-	jw.WriteString("}\n")  // close 'public interface ... {'
+	jw.WriteString("}\n") // close 'public interface ... {'
 	jw.Flush()
 
 	return modulePackage
@@ -400,43 +398,44 @@ func (sg *StructGen) outputStruct(depth int, structName string, underlyingStruct
 
 type ModelConfig struct {
 	// Override the name of the Java class name
-	Class         string `yaml:"class"`
+	Class string `yaml:"class"`
 
 	// The go package
-	PkgDir        string `yaml:"package"`
+	PkgDir string `yaml:"package"`
 
 	// Vendor directory with which to satisfy dependencies
-	VendorDir     string `yaml:"vendor"`
+	VendorDir string `yaml:"vendor"`
 
 	// The name of the go type to model
-	GoType        string `yaml:"go_type"`
-	KubeGroup     string `yaml:"kube_group"`
-	KubeVersion   string `yaml:"kube_version"`
-	KubeName      string `yaml:"kube_name"`
-	KubeNamespace string `yaml:"kube_namespace"`
-	ModelOnly     bool `yaml:"model_only"`
-	List          bool `yaml:"list"`
-	Map           bool `yaml:"map"`
+	GoType string `yaml:"go_type"`
+	// Change the name of the generate java method
+	InterfaceMethodName string `yaml:"interface_method_name"`
+	KubeGroup           string `yaml:"kube_group"`
+	KubeVersion         string `yaml:"kube_version"`
+	KubeName            string `yaml:"kube_name"`
+	KubeNamespace       string `yaml:"kube_namespace"`
+	ModelOnly           bool   `yaml:"model_only"`
+	List                bool   `yaml:"list"`
+	Map                 bool   `yaml:"map"`
 
 	// Elements that should only be modeled
-	SubModels    []ModelConfig `yaml:"sub_models"`
+	SubModels []ModelConfig `yaml:"sub_models"`
 }
 
 type Unit struct {
 	// The name of the Java interface that must be implemented for the Unit
-	Class       string `yaml:"class"`
+	Class string `yaml:"class"`
 
 	// Human name for the Unit
-	Name        string `yaml:"name"`
+	Name string `yaml:"name"`
 
 	// Which version of OpenShift the Unit is appropriate for
-	Version     string `yaml:"version"`
+	Version string `yaml:"version"`
 
 	// The ModelConfig elements that make up the Unit
-	Elements    []ModelConfig `yaml:"elements"`
+	Elements []ModelConfig `yaml:"elements"`
 
-
-	JavaImports []string  `yaml:"imports"`
+	JavaImports []string `yaml:"imports"`
 }
 
 type GuideYaml struct {
@@ -473,7 +472,7 @@ func main() {
 	fmt.Println(fmt.Sprintf("Loaded go paths: %v", importerPaths))
 
 	os.MkdirAll(basePackageDir, 0750)
-	unitsEnumType, err := os.OpenFile(path.Join(basePackageDir, "UnitType.java"), os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
+	unitsEnumType, err := os.OpenFile(path.Join(basePackageDir, "UnitType.java"), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0750)
 	check(err)
 
 	unitEnumWriter := bufio.NewWriter(unitsEnumType)
@@ -488,9 +487,9 @@ func main() {
 
 		// Within a unit, definitions can be ordered by the renderer to ensure they are populated
 		// on the cluster in specific order. Their order in the source yaml is honored.
-		renderOrderHint := 1;
+		renderOrderHint := 1
 
-		renderModel := func(modelConfig ModelConfig)  {
+		renderModel := func(modelConfig ModelConfig) {
 
 			// If the go type has a Java type already associated, don't bother generating java
 			if _, ok := simpleJavaTypeMap[modelConfig.GoType]; ok {
@@ -500,7 +499,7 @@ func main() {
 			// Create an importer that will search go elements for the main package
 			// Also specify vendor directory which element may have specified.
 			importer := dynimporter{
-				paths: importerPaths,
+				paths:     importerPaths,
 				vendorDir: modelConfig.VendorDir,
 			}
 
@@ -522,20 +521,20 @@ func main() {
 			scope := pkg.Scope()
 			obj := scope.Lookup(modelConfig.GoType)
 			fmt.Println("Loaded", modelConfig.GoType, "=>", obj.String())
-			named := obj.Type().(*types.Named)  // .Type() returns the type of the language element. We assume it is a named type.
+			named := obj.Type().(*types.Named)                     // .Type() returns the type of the language element. We assume it is a named type.
 			underlyingStruct := named.Underlying().(*types.Struct) // The underlying type of the object should be a struct
-			structName := obj.Name() // obj.Name()  example: "NetworkConfig"
+			structName := obj.Name()                               // obj.Name()  example: "NetworkConfig"
 
 			sg := StructGen{
-				goPkgDir: goPkgDir,
+				goPkgDir:   goPkgDir,
 				javaPkgDir: javaPkgDir,
-				pkg: packageName,
-				beanPkg: beanPkg,
-				config: modelConfig,
+				pkg:        packageName,
+				beanPkg:    beanPkg,
+				config:     modelConfig,
 				outputDone: make(map[string]bool),
 			}
 
-			out(0, "Processing unit: " + unit.Name + "=>" + structName)
+			out(0, "Processing unit: "+unit.Name+"=>"+structName)
 			modulePackage := sg.outputStruct(1, structName, underlyingStruct, modelConfig.Class)
 			unit.JavaImports = append(unit.JavaImports, modulePackage)
 
@@ -561,7 +560,7 @@ func main() {
 		unitHumanName := fmt.Sprintf("%s-%s", unit.Version, unit.Name)
 
 		os.MkdirAll(unitPkgDir, 0755)
-		javaFile, err := os.OpenFile(path.Join(unitPkgDir, className + ".java"), os.O_CREATE | os.O_TRUNC | os.O_WRONLY, 0750)
+		javaFile, err := os.OpenFile(path.Join(unitPkgDir, className+".java"), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0750)
 		check(err)
 
 		unitEnumWriter.WriteString(fmt.Sprintf("\t%s_%s(%s, %q, %q),\n", unitUnderscoreVersion, unit.Name, unitClassName, unit.Name, unitHumanName))
@@ -589,7 +588,6 @@ func main() {
 			renderOrderHint = renderOrderHint + 1
 		}
 
-
 		jw.WriteString("\npublic interface " + className + " extends UnitBase {\n\n")
 		for _, oc := range unit.Elements {
 			if oc.ModelOnly == false {
@@ -599,6 +597,10 @@ func main() {
 				}
 
 				methodName := "get" + className
+				if len(oc.InterfaceMethodName) > 0 {
+				    methodName = oc.InterfaceMethodName
+				}
+
 				javaType := className
 				if oc.List {
 					javaType = "KubeList<" + className + ">"
@@ -607,16 +609,15 @@ func main() {
 					javaType = "Map<String," + className + ">"
 					methodName = methodName + "Map"
 				}
-				writeMethodSig(javaType, methodName);
+				writeMethodSig(javaType, methodName)
 			}
 		}
 
 		jw.WriteString(fmt.Sprintf("\tinterface EZ extends %s {\n\n", className))
 		for _, ezDefault := range ezDefaults {
-			jw.WriteString(ezDefault);
+			jw.WriteString(ezDefault)
 		}
 		jw.WriteString("\t}\n\n") // close EZ interface
-
 
 		jw.WriteString("\n}\n")
 		jw.Flush()
@@ -625,19 +626,15 @@ func main() {
 
 	unitEnumWriter.WriteString("\t;\n\n") // end the enum element list
 
-	unitEnumWriter.WriteString("\tpublic Class<?> mustImplementClass;\n\n" );
-	unitEnumWriter.WriteString("\tpublic String unitName;\n\n" );
-	unitEnumWriter.WriteString("\tpublic String humanName;\n\n" );
+	unitEnumWriter.WriteString("\tpublic Class<?> mustImplementClass;\n\n")
+	unitEnumWriter.WriteString("\tpublic String unitName;\n\n")
+	unitEnumWriter.WriteString("\tpublic String humanName;\n\n")
 
-	unitEnumWriter.WriteString("\tUnitType(Class<?> mustImplementClass, String unitName, String humanName) { this.mustImplementClass = mustImplementClass; this.unitName = unitName; this.humanName = humanName; }\n" );
+	unitEnumWriter.WriteString("\tUnitType(Class<?> mustImplementClass, String unitName, String humanName) { this.mustImplementClass = mustImplementClass; this.unitName = unitName; this.humanName = humanName; }\n")
 
 	unitEnumWriter.WriteString("\n}\n")
 	unitEnumWriter.Flush()
 	unitsEnumType.Close()
 
-
 	return
 }
-
-
-
